@@ -1,0 +1,83 @@
+{
+  "occupations": [
+    {
+      "anzsco_code": "2611",
+      "title": "ICT Business and Systems Analysts",
+      "category": "Professionals",
+      "employment": 89000.0,
+      "median_earnings": 2100.0,
+      "education": "Bachelor's degree",
+      "growth_5yr_pct": null,
+      "growth_10yr_pct": null,
+      "ai_exposure": 8,
+      "rationale": "Core analysis and documentation tasks are heavily augmented by AI tools already."
+    },
+    {
+      "anzsco_code": "2544",
+      "title": "Registered Nurses",
+      "category": "Professionals",
+      "employment": 345000.0,
+      "median_earnings": 1750.0,
+      "education": "Bachelor's degree",
+      "growth_5yr_pct": null,
+      "growth_10yr_pct": null,
+      "ai_exposure": 4,
+      "rationale": "Hands-on patient care and judgement remain central despite AI-assisted documentation."
+    },
+    {
+      "anzsco_code": "3222",
+      "title": "Electricians",
+      "category": "Technicians and Trades Workers",
+      "employment": 165000.0,
+      "median_earnings": 1600.0,
+      "education": "Certificate III/IV",
+      "growth_5yr_pct": null,
+      "growth_10yr_pct": null,
+      "ai_exposure": 2,
+      "rationale": "Physical installation and diagnostic work has few AI substitutes today."
+    },
+    {
+      "anzsco_code": "5511",
+      "title": "Keyboard Operators",
+      "category": "Clerical and Administrative Workers",
+      "employment": 8000.0,
+      "median_earnings": 1100.0,
+      "education": "Year 12",
+      "growth_5yr_pct": null,
+      "growth_10yr_pct": null,
+      "ai_exposure": 10,
+      "rationale": "Pure data entry is fully automatable with current AI systems."
+    },
+    {
+      "anzsco_code": "1341",
+      "title": "Health and Welfare Services Managers",
+      "category": "Managers",
+      "employment": 72000.0,
+      "median_earnings": 2300.0,
+      "education": "Bachelor's degree",
+      "growth_5yr_pct": null,
+      "growth_10yr_pct": null,
+      "ai_exposure": 6,
+      "rationale": "Strategic and people-management work is AI-assisted but still human-led."
+    },
+    {
+      "anzsco_code": "8219",
+      "title": "Farm, Forestry and Garden Labourers",
+      "category": "Labourers",
+      "employment": 61000.0,
+      "median_earnings": 950.0,
+      "education": "Year 10",
+      "growth_5yr_pct": null,
+      "growth_10yr_pct": null,
+      "ai_exposure": 1,
+      "rationale": "Outdoor manual labour remains largely outside current AI/automation reach."
+    }
+  ],
+  "meta": {
+    "total_occupations": 6,
+    "scored_occupations": 6,
+    "total_employment": 740000,
+    "avg_ai_exposure_weighted": 4.05,
+    "sample": true
+  }
+}

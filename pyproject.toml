@@ -1,0 +1,80 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "au-jobs"
+version = "0.1.0"
+description = "Score every ANZSCO occupation in Australia on AI exposure and visualise it as a treemap."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Bhavin Mistry" }]
+requires-python = ">=3.10"
+keywords = ["anzsco", "australia", "labour-market", "ai-exposure", "jobs-and-skills-australia"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Information Analysis",
+]
+dependencies = [
+  "anthropic>=0.40.0",
+  "openpyxl>=3.1.2",
+  "pandas>=2.2.0",
+  "requests>=2.31.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.11",
+  "pandas-stubs>=2.2",
+  "pytest>=8.2",
+  "pytest-cov>=5.0",
+  "ruff>=0.6",
+  "types-requests>=2.31",
+]
+
+[project.scripts]
+aujobs = "aujobs.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/bmistry1818/au-jobs"
+Repository = "https://github.com/bmistry1818/au-jobs"
+Issues = "https://github.com/bmistry1818/au-jobs/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aujobs"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "C4", "RUF", "ARG", "PTH"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ARG"]
+
+[tool.mypy]
+# No `python_version` pin: numpy's bundled stubs require mypy to analyse at the
+# running interpreter's version. CI type-checks on the newest supported Python.
+files = ["src", "tests"]
+strict = true
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = ["pandas.*", "anthropic.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
+filterwarnings = ["error"]

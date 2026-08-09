@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Exposure of the Australian Job Market</title>
+<meta name="description" content="Every ANZSCO occupation in Australia, sized by employment and coloured by projected AI exposure.">
+<meta name="color-scheme" content="dark">
+<meta property="og:title" content="AI Exposure of the Australian Job Market">
+<meta property="og:description" content="Every ANZSCO occupation in Australia, sized by employment and coloured by projected AI exposure.">
+<meta property="og:type" content="website">
+<script
+  src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"
+  integrity="sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i"
+  crossorigin="anonymous"
+  referrerpolicy="no-referrer"
+  defer></script>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --text: #e8e8ec;
+    --muted: #9a9ba5;
+    --border: #2a2d36;
+    --focus: #7aa2f7;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    padding: 24px 32px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  h1 {
+    margin: 0 0 4px;
+    font-size: 22px;
+    font-weight: 600;
+  }
+  .subtitle {
+    color: var(--muted);
+    font-size: 14px;
+    margin: 0;
+  }
+  .banner {
+    margin: 0;
+    padding: 10px 32px;
+    background: #2a2410;
+    border-bottom: 1px solid var(--border);
+    color: #e8d9a0;
+    font-size: 13px;
+  }
+  .banner[hidden] { display: none; }
+  .stats {
+    display: flex;
+    gap: 28px;
+    padding: 14px 32px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--muted);
+    flex-wrap: wrap;
+  }
+  .stats b { color: var(--text); font-size: 15px; display: block; }
+  .legend {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 32px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .legend-scale {
+    display: flex;
+    height: 10px;
+    width: 220px;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  #chart-container { padding: 16px 32px 32px; }
+  #chart { width: 100%; }
+  .cell rect {
+    stroke: var(--bg);
+    stroke-width: 1.5px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .cell:hover rect,
+  .cell:focus-visible rect {
+    opacity: 0.85;
+    stroke: #fff;
+  }
+  .cell:focus { outline: none; }
+  .cell:focus-visible rect { stroke: var(--focus); stroke-width: 2.5px; }
+  .cell text {
+    fill: rgba(0, 0, 0, 0.85);
+    font-size: 11px;
+    font-weight: 600;
+    pointer-events: none;
+  }
+  #tooltip {
+    position: fixed;
+    display: none;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    max-width: 280px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    pointer-events: none;
+    z-index: 10;
+  }
+  #tooltip .t-title { font-weight: 600; margin-bottom: 6px; font-size: 14px; }
+  #tooltip .t-row { display: flex; justify-content: space-between; gap: 16px; color: var(--muted); margin: 2px 0; }
+  #tooltip .t-row span:last-child { color: var(--text); }
+  #tooltip .t-rationale { margin-top: 8px; color: var(--muted); font-style: italic; font-size: 12px; }
+  #category-filter {
+    padding: 12px 32px 0;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .chip {
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    padding: 5px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+  }
+  .chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .chip[aria-pressed="true"] {
+    background: var(--text);
+    color: var(--bg);
+    border-color: var(--text);
+  }
+  #message {
+    padding: 60px 32px;
+    text-align: center;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  #message[hidden] { display: none; }
+  code { background: var(--panel); padding: 2px 6px; border-radius: 4px; }
+  .visually-hidden {
+    position: absolute;
+    width: 1px; height: 1px;
+    margin: -1px; padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  @media (max-width: 640px) {
+    header, .stats, .legend, #category-filter, #chart-container, .banner { padding-left: 16px; padding-right: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>AI Exposure of the Australian Job Market</h1>
+  <p class="subtitle">Every ANZSCO occupation, sized by employment, coloured by projected AI exposure (0&ndash;10)</p>
+</header>
+
+<p class="banner" id="sample-banner" hidden>
+  Showing the checked-in <strong>sample dataset</strong> (a handful of occupations).
+  Run the pipeline to generate the full dataset.
+</p>
+
+<div class="stats" id="stats"></div>
+
+<div class="legend">
+  <span>Low exposure</span>
+  <div class="legend-scale" role="img" aria-label="Colour scale from green (low AI exposure) to red (high AI exposure)">
+    <div style="flex:1;background:#1a9850"></div>
+    <div style="flex:1;background:#91cf60"></div>
+    <div style="flex:1;background:#d9ef8b"></div>
+    <div style="flex:1;background:#fee08b"></div>
+    <div style="flex:1;background:#fc8d59"></div>
+    <div style="flex:1;background:#d73027"></div>
+  </div>
+  <span>High exposure</span>
+</div>
+
+<div id="category-filter" role="group" aria-label="Filter by ANZSCO major group"></div>
+
+<div id="chart-container">
+  <div id="chart"></div>
+</div>
+
+<p id="message" hidden></p>
+
+<div id="tooltip" role="tooltip" aria-hidden="true"></div>
+<div class="visually-hidden" aria-live="polite" id="status"></div>
+
+<script>
+"use strict";
+
+(function () {
+  const COLOR_STOPS = ["#1a9850", "#91cf60", "#d9ef8b", "#fee08b", "#fc8d59", "#d73027"];
+  const CHART_HEIGHT = 640;
+  const MIN_LABEL_WIDTH = 60;
+  const MIN_LABEL_HEIGHT = 24;
+  const PX_PER_CHAR = 6;
+
+  const tooltipEl = document.getElementById("tooltip");
+  const messageEl = document.getElementById("message");
+  const statusEl = document.getElementById("status");
+  let activeCategory = null;
+
+  function showMessage(html) {
+    messageEl.innerHTML = html;
+    messageEl.hidden = false;
+  }
+
+  function fmtNum(value) {
+    return value === null || value === undefined ? "—" : Math.round(value).toLocaleString();
+  }
+
+  function fmtMoney(value) {
+    return value === null || value === undefined ? "—" : "$" + Math.round(value).toLocaleString();
+  }
+
+  function fmtPct(value) {
+    return value === null || value === undefined ? "—" : value.toFixed(1) + "%";
+  }
+
+  // Build tooltip content with textContent rather than innerHTML: occupation
+  // titles and rationales are pipeline output, not trusted markup.
+  function row(label, value) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "t-row";
+    const left = document.createElement("span");
+    left.textContent = label;
+    const right = document.createElement("span");
+    right.textContent = value;
+    wrapper.append(left, right);
+    return wrapper;
+  }
+
+  function tooltipContent(d) {
+    const fragment = document.createDocumentFragment();
+    const title = document.createElement("div");
+    title.className = "t-title";
+    title.textContent = d.title;
+    fragment.append(
+      title,
+      row("ANZSCO", d.anzsco_code),
+      row("Employment", fmtNum(d.employment)),
+      row("Median earnings", fmtMoney(d.median_earnings)),
+      row("5yr growth", fmtPct(d.growth_5yr_pct)),
+      row("AI exposure", d.ai_exposure + "/10")
+    );
+    if (d.rationale) {
+      const rationale = document.createElement("div");
+      rationale.className = "t-rationale";
+      rationale.textContent = d.rationale;
+      fragment.append(rationale);
+    }
+    return fragment;
+  }
+
+  function positionTooltip(event) {
+    const margin = 16;
+    const rect = tooltipEl.getBoundingClientRect();
+    const x = Math.min(event.clientX + margin, window.innerWidth - rect.width - margin);
+    const y = Math.min(event.clientY + margin, window.innerHeight - rect.height - margin);
+    tooltipEl.style.left = Math.max(margin, x) + "px";
+    tooltipEl.style.top = Math.max(margin, y) + "px";
+  }
+
+  function showTooltip(event, d) {
+    tooltipEl.replaceChildren(tooltipContent(d));
+    tooltipEl.style.display = "block";
+    tooltipEl.setAttribute("aria-hidden", "false");
+    positionTooltip(event);
+  }
+
+  function hideTooltip() {
+    tooltipEl.style.display = "none";
+    tooltipEl.setAttribute("aria-hidden", "true");
+  }
+
+  function renderStats(meta, scored) {
+    const stats = [
+      [meta.total_occupations, "occupations"],
+      [meta.scored_occupations ?? scored.length, "scored"],
+      [Number(meta.total_employment || 0).toLocaleString(), "total employment"],
+      [meta.avg_ai_exposure_weighted ?? "—", "job-weighted avg. AI exposure"],
+    ];
+    const container = document.getElementById("stats");
+    container.replaceChildren(
+      ...stats.map(([value, label]) => {
+        const block = document.createElement("div");
+        const strong = document.createElement("b");
+        strong.textContent = String(value);
+        block.append(strong, document.createTextNode(label));
+        return block;
+      })
+    );
+  }
+
+  function renderChips(categories, onChange) {
+    const container = document.getElementById("category-filter");
+    const labels = ["All", ...categories];
+    const buttons = labels.map((label) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "chip";
+      chip.textContent = label;
+      chip.setAttribute("aria-pressed", String(label === "All"));
+      chip.addEventListener("click", () => {
+        activeCategory = label === "All" ? null : label;
+        buttons.forEach((other) => {
+          const pressed = other === chip;
+          other.setAttribute("aria-pressed", String(pressed));
+        });
+        statusEl.textContent = "Showing " + label;
+        onChange();
+      });
+      return chip;
+    });
+    container.replaceChildren(...buttons);
+  }
+
+  function draw(occupations) {
+    const filtered = activeCategory
+      ? occupations.filter((d) => d.category === activeCategory)
+      : occupations;
+
+    const grouped = d3.groups(filtered, (d) => d.category).map(([category, items]) => ({
+      name: category,
+      children: items,
+    }));
+
+    const root = d3
+      .hierarchy({ name: "root", children: grouped })
+      .sum((d) => d.employment || 0)
+      .sort((a, b) => b.value - a.value);
+
+    const container = document.getElementById("chart");
+    const width = Math.max(320, container.clientWidth);
+    const height = CHART_HEIGHT;
+
+    d3.treemap().size([width, height]).paddingOuter(3).paddingTop(20).paddingInner(2)(root);
+
+    const colorScale = d3.scaleLinear().domain([0, 2, 4, 6, 8, 10]).range(COLOR_STOPS);
+
+    const svg = d3
+      .select(container)
+      .html("")
+      .append("svg")
+      .attr("width", "100%")
+      .attr("height", height)
+      .attr("viewBox", [0, 0, width, height])
+      .attr("role", "img")
+      .attr("aria-label", "Treemap of Australian occupations by employment and AI exposure");
+
+    svg
+      .selectAll(".group-label")
+      .data(root.children || [])
+      .join("text")
+      .attr("class", "group-label")
+      .attr("x", (d) => d.x0 + 4)
+      .attr("y", (d) => d.y0 + 14)
+      .attr("fill", "#9a9ba5")
+      .attr("font-size", "12px")
+      .attr("font-weight", "600")
+      .text((d) => d.data.name);
+
+    const leaf = svg
+      .selectAll(".cell")
+      .data(root.leaves())
+      .join("g")
+      .attr("class", "cell")
+      .attr("tabindex", 0)
+      .attr("transform", (d) => `translate(${d.x0},${d.y0})`);
+
+    leaf
+      .append("rect")
+      .attr("width", (d) => Math.max(0, d.x1 - d.x0))
+      .attr("height", (d) => Math.max(0, d.y1 - d.y0))
+      .attr("fill", (d) => colorScale(d.data.ai_exposure))
+      .attr("rx", 2);
+
+    // Native SVG tooltip: works for keyboard, screen readers and touch.
+    leaf
+      .append("title")
+      .text(
+        (d) =>
+          `${d.data.title} — ${fmtNum(d.data.employment)} employed, ` +
+          `AI exposure ${d.data.ai_exposure}/10`
+      );
+
+    leaf
+      .on("mousemove", (event, d) => showTooltip(event, d.data))
+      .on("mouseleave", hideTooltip)
+      .on("focus", function (event, d) {
+        const box = this.getBoundingClientRect();
+        showTooltip({ clientX: box.left, clientY: box.bottom }, d.data);
+      })
+      .on("blur", hideTooltip);
+
+    leaf.each(function (d) {
+      const w = d.x1 - d.x0;
+      const h = d.y1 - d.y0;
+      if (w <= MIN_LABEL_WIDTH || h <= MIN_LABEL_HEIGHT) return;
+      const maxChars = Math.floor(w / PX_PER_CHAR);
+      const label =
+        d.data.title.length > maxChars ? d.data.title.slice(0, maxChars) + "…" : d.data.title;
+      d3.select(this).append("text").attr("x", 5).attr("y", 15).text(label);
+    });
+  }
+
+  function render(payload) {
+    const meta = payload.meta || {};
+    const all = Array.isArray(payload.occupations) ? payload.occupations : [];
+    const plottable = all.filter((d) => d.employment > 0 && Number.isFinite(d.ai_exposure));
+
+    document.getElementById("sample-banner").hidden = !meta.sample;
+    renderStats(meta, plottable);
+
+    if (plottable.length === 0) {
+      showMessage(
+        "No scored occupations with employment data to plot yet.<br>" +
+          "Run <code>aujobs score</code> and then <code>aujobs build</code>."
+      );
+      return;
+    }
+
+    const categories = [...new Set(plottable.map((d) => d.category))].sort();
+    renderChips(categories, () => draw(plottable));
+    draw(plottable);
+
+    let resizeTimer;
+    window.addEventListener("resize", () => {
+      window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(() => draw(plottable), 150);
+    });
+  }
+
+  function start() {
+    if (typeof d3 === "undefined") {
+      showMessage("Could not load the D3 library. Check your network connection and reload.");
+      return;
+    }
+    fetch("data.json", { cache: "no-cache" })
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      })
+      .then(render)
+      .catch((error) => {
+        showMessage(
+          "Could not load <code>data.json</code> (" +
+            String(error.message) +
+            ").<br>Run <code>aujobs extract</code> → <code>aujobs score</code> → " +
+            "<code>aujobs build</code>, and serve this directory over HTTP."
+        );
+      });
+  }
+
+  if (document.readyState === "loading") {
+    window.addEventListener("DOMContentLoaded", start);
+  } else {
+    start();
+  }
+})();
+</script>
+
+</body>
+</html>

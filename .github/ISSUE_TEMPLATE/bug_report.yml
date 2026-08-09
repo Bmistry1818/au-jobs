@@ -1,0 +1,50 @@
+name: Bug report
+description: Something in the pipeline or the site does not work as expected.
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Which stage?
+      options:
+        - extract (JSA download / parsing)
+        - score (Claude API)
+        - build (site/data.json)
+        - site (treemap)
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Include the exact command you ran and the full error output.
+      placeholder: |
+        $ aujobs extract
+        ExtractError: Could not find an employment column ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `aujobs --version`, plus your Python version and OS.
+      placeholder: "aujobs 0.1.0, Python 3.12.4, macOS 15"
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        **Note:** JSA changes its workbook column names between releases. If the
+        extract stage fails to find a column, please paste the column names the
+        error message lists — that is what we need to fix the parser.

@@ -1,0 +1,8 @@
+{
+  "2611": {"title": "ICT Business and Systems Analysts", "score": 8, "rationale": "Core analysis and documentation tasks are heavily augmented by AI tools already."},
+  "2544": {"title": "Registered Nurses", "score": 4, "rationale": "Hands-on patient care and judgement remain central despite AI-assisted documentation."},
+  "3222": {"title": "Electricians", "score": 2, "rationale": "Physical installation and diagnostic work has few AI substitutes today."},
+  "5511": {"title": "Keyboard Operators", "score": 10, "rationale": "Pure data entry is fully automatable with current AI systems."},
+  "1341": {"title": "Health and Welfare Services Managers", "score": 6, "rationale": "Strategic and people-management work is AI-assisted but still human-led."},
+  "8219": {"title": "Farm, Forestry and Garden Labourers", "score": 1, "rationale": "Outdoor manual labour remains largely outside current AI/automation reach."}
+}

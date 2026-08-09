@@ -1,0 +1,56 @@
+[
+  {
+    "anzsco_code": "2611",
+    "title": "ICT Business and Systems Analysts",
+    "employment": 89000,
+    "median_earnings": 2100,
+    "education": "Bachelor's degree",
+    "growth_5yr_pct": null,
+    "growth_10yr_pct": null
+  },
+  {
+    "anzsco_code": "2544",
+    "title": "Registered Nurses",
+    "employment": 345000,
+    "median_earnings": 1750,
+    "education": "Bachelor's degree",
+    "growth_5yr_pct": null,
+    "growth_10yr_pct": null
+  },
+  {
+    "anzsco_code": "3222",
+    "title": "Electricians",
+    "employment": 165000,
+    "median_earnings": 1600,
+    "education": "Certificate III/IV",
+    "growth_5yr_pct": null,
+    "growth_10yr_pct": null
+  },
+  {
+    "anzsco_code": "5511",
+    "title": "Keyboard Operators",
+    "employment": 8000,
+    "median_earnings": 1100,
+    "education": "Year 12",
+    "growth_5yr_pct": null,
+    "growth_10yr_pct": null
+  },
+  {
+    "anzsco_code": "1341",
+    "title": "Health and Welfare Services Managers",
+    "employment": 72000,
+    "median_earnings": 2300,
+    "education": "Bachelor's degree",
+    "growth_5yr_pct": null,
+    "growth_10yr_pct": null
+  },
+  {
+    "anzsco_code": "8219",
+    "title": "Farm, Forestry and Garden Labourers",
+    "employment": 61000,
+    "median_earnings": 950,
+    "education": "Year 10",
+    "growth_5yr_pct": null,
+    "growth_10yr_pct": null
+  }
+]
