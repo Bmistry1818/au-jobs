@@ -84,8 +84,14 @@ def build_session() -> requests.Session:
     return session
 
 
-def find_xlsx_link(session: requests.Session, page_url: str) -> str:
+def find_xlsx_link(
+    session: requests.Session, page_url: str, must_contain: str | None = None
+) -> str:
     """Return the first ``.xlsx`` download link on a JSA data page.
+
+    ``must_contain`` (case-insensitive) selects one workbook when a page links several.
+    The OSCA and ANZSCO occupation files share a page, so the pipeline asks for ANZSCO
+    by name rather than taking whichever file comes first.
 
     The resolved URL is checked against the JSA host so a redirect or an edited
     page cannot point the downloader at an arbitrary third-party origin.
@@ -95,13 +101,16 @@ def find_xlsx_link(session: requests.Session, page_url: str) -> str:
 
     for match in re.finditer(r"""href=["']([^"']+?\.xlsx)["']""", response.text, re.IGNORECASE):
         url = urljoin(page_url, str(match.group(1)))
+        if must_contain and must_contain.lower() not in url.lower():
+            continue
         host = urlparse(url).netloc.lower()
         if host == JSA_HOST or host.endswith(f".{JSA_HOST}"):
             return url
         log.warning("Ignoring off-site .xlsx link on %s: %s", page_url, url)
 
+    wanted = f" containing {must_contain!r}" if must_contain else ""
     raise ExtractError(
-        f"No .xlsx download link found on {page_url}. "
+        f"No .xlsx download link{wanted} found on {page_url}. "
         "JSA may have changed the page structure — check the URL in aujobs/config.py."
     )
 
@@ -314,7 +323,8 @@ def run(
     else:
         session = build_session()
         log.info("Locating current JSA download links")
-        profiles_url = find_xlsx_link(session, OCCUPATION_PROFILES_PAGE)
+        # The profiles page also links the OSCA (2021 Census) workbook; this pipeline is ANZSCO.
+        profiles_url = find_xlsx_link(session, OCCUPATION_PROFILES_PAGE, must_contain="anzsco")
         projections_url = find_xlsx_link(session, EMPLOYMENT_PROJECTIONS_PAGE)
         profiles_path = download(session, profiles_url, raw_dir / "occupation_profiles.xlsx")
         projections_path = download(

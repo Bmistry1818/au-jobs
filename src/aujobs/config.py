@@ -37,7 +37,9 @@ OCCUPATION_PROFILES_PAGE: Final[str] = f"{JSA_BASE_URL}/data/occupation-and-indu
 EMPLOYMENT_PROJECTIONS_PAGE: Final[str] = f"{JSA_BASE_URL}/data/employment-projections"
 IVI_PAGE: Final[str] = f"{JSA_BASE_URL}/work/internet-vacancy-index"
 
-USER_AGENT: Final[str] = "au-jobs/0.1 (+https://github.com/bmistry1818/au-jobs)"
+# jobsandskills.gov.au drops requests whose User-Agent contains a URL, so keep this to
+# the project name. (The earlier value with a "+https://github.com/..." suffix timed out.)
+USER_AGENT: Final[str] = "Mozilla/5.0 (compatible; au-jobs/0.1)"
 
 # ANZSCO major group, keyed on the first digit of the 4-digit occupation code.
 MAJOR_GROUPS: Final[dict[str, str]] = {
