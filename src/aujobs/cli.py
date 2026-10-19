@@ -1,4 +1,4 @@
-"""Command-line entry point: ``aujobs {extract,score,build,all}``."""
+"""Command-line entry point: ``aujobs {extract,demand,score,build,validate,evaluate,all}``."""
 
 from __future__ import annotations
 
@@ -11,8 +11,19 @@ from pathlib import Path
 import anthropic
 import requests
 
-from aujobs import __version__, build, extract, score
-from aujobs.config import OCCUPATIONS_CSV, OCCUPATIONS_JSON, RAW_DIR, SCORES_JSON, SITE_DATA_JSON
+from aujobs import __version__, build, demand, evaluate, extract, manifest, score, validate
+from aujobs.config import (
+    DEMAND_JSON,
+    EXAMPLES_DIR,
+    MANIFEST_JSON,
+    OCCUPATIONS_CSV,
+    OCCUPATIONS_JSON,
+    OSCA_CROSSWALK_CSV,
+    RAW_DIR,
+    SCORES_JSON,
+    SITE_DATA_JSON,
+    read_json,
+)
 
 log = logging.getLogger("aujobs")
 
@@ -52,6 +63,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="parse a local employment-projections workbook instead of downloading",
     )
 
+    demand_parser = subparsers.add_parser(
+        "demand", help="read the Internet Vacancy Index (online job ads by occupation)"
+    )
+    demand_parser.add_argument("--xlsx", type=Path, help="use a local IVI workbook")
+    demand_parser.add_argument("--raw-dir", type=Path, default=RAW_DIR)
+    demand_parser.add_argument("--output", type=Path, default=DEMAND_JSON)
+
     score_parser = subparsers.add_parser(
         "score", help="score occupations on AI exposure (needs ANTHROPIC_API_KEY)"
     )
@@ -69,18 +87,92 @@ def build_parser() -> argparse.ArgumentParser:
         "--limit", type=int, help="score at most N occupations (useful for a smoke test)"
     )
 
-    build_parser_ = subparsers.add_parser(
-        "build", help="merge stats and scores into site/data.json"
-    )
+    build_parser_ = subparsers.add_parser("build", help="merge everything into site/data.json")
     build_parser_.add_argument("--occupations", type=Path, default=OCCUPATIONS_JSON)
     build_parser_.add_argument("--scores", type=Path, default=SCORES_JSON)
+    build_parser_.add_argument("--demand", type=Path, default=DEMAND_JSON)
+    build_parser_.add_argument("--crosswalk", type=Path, default=OSCA_CROSSWALK_CSV)
+    build_parser_.add_argument("--manifest", type=Path, default=MANIFEST_JSON)
     build_parser_.add_argument("--output", type=Path, default=SITE_DATA_JSON)
     build_parser_.add_argument(
-        "--sample", action="store_true", help="tag the output as a demo dataset"
+        "--sample",
+        action="store_true",
+        help="build the reproducible demo dataset from examples/ (ignores local data)",
     )
 
-    subparsers.add_parser("all", help="run extract, then score, then build")
+    subparsers.add_parser("validate", help="check every data artefact against its schema")
+
+    evaluate_parser = subparsers.add_parser(
+        "evaluate", help="compare scores with the gold set; optionally measure variance"
+    )
+    evaluate_parser.add_argument("--scores", type=Path, default=SCORES_JSON)
+    evaluate_parser.add_argument("--gold", type=Path, default=evaluate.GOLD_CSV)
+    evaluate_parser.add_argument("--input", type=Path, default=OCCUPATIONS_JSON)
+    evaluate_parser.add_argument(
+        "--variance-sample",
+        type=int,
+        default=0,
+        metavar="N",
+        help="score N occupations several times to measure spread (makes API calls)",
+    )
+    evaluate_parser.add_argument("--repeats", type=int, default=3)
+    evaluate_parser.add_argument("--model", default=score.DEFAULT_MODEL)
+    evaluate_parser.add_argument("--effort", default=score.DEFAULT_EFFORT)
+
+    subparsers.add_parser("all", help="run extract, demand, score, then build")
     return parser
+
+
+def _run_evaluate(args: argparse.Namespace) -> None:
+    labels = evaluate.load_gold(args.gold)
+    if not labels:
+        print(f"No gold labels found at {args.gold}.")
+    else:
+        scores = score.load_existing_scores(args.scores)
+        report = evaluate.agreement(scores, labels)
+        print(f"Gold-set agreement (provisional labels): {report.evaluated} evaluated")
+        if report.evaluated:
+            print(f"  mean absolute error: {report.mean_absolute_error}")
+            print(f"  within tolerance:    {report.within_tolerance:.0%}")
+        for code, expected, actual in report.misses:
+            print(f"  miss: {code} expected {expected}, scored {actual}")
+        if report.missing:
+            print(f"  not yet scored: {', '.join(report.missing)}")
+
+    if args.variance_sample:
+        occupations = score.load_occupations(args.input)
+        chosen = evaluate.sample(occupations, args.variance_sample)
+        scorer = score.Scorer(
+            anthropic.Anthropic(max_retries=5), model=args.model, effort=args.effort
+        )
+        rows = evaluate.variance(scorer, chosen, args.repeats)
+        print(f"\nVariance across {args.repeats} runs per occupation:")
+        for row in rows:
+            print(
+                f"  {row.code} {row.title[:40]:<40} scores {list(row.scores)} "
+                f"mean {row.mean} spread {row.spread}"
+            )
+
+
+def _run_validate() -> int:
+    problems: list[str] = []
+    if OCCUPATIONS_JSON.exists():
+        problems += validate.occupation_problems(read_json(OCCUPATIONS_JSON))
+    if SCORES_JSON.exists():
+        problems += validate.score_problems(read_json(SCORES_JSON))
+    if DEMAND_JSON.exists():
+        problems += validate.demand_problems(read_json(DEMAND_JSON))
+    if SITE_DATA_JSON.exists():
+        problems += validate.site_problems(read_json(SITE_DATA_JSON))
+    if MANIFEST_JSON.exists():
+        problems += manifest.verify(MANIFEST_JSON, RAW_DIR)
+
+    if problems:
+        for problem in problems:
+            print(f"- {problem}")
+        return 1
+    print("All artefacts are valid.")
+    return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -98,6 +190,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 offline_profiles=args.profiles_xlsx,
                 offline_projections=args.projections_xlsx,
             )
+        elif args.command == "demand":
+            demand.run(xlsx_path=args.xlsx, raw_dir=args.raw_dir, output_path=args.output)
         elif args.command == "score":
             score.run(
                 occupations_path=args.input,
@@ -109,14 +203,37 @@ def main(argv: Sequence[str] | None = None) -> int:
                 limit=args.limit,
             )
         elif args.command == "build":
-            build.run(
-                occupations_path=args.occupations,
-                scores_path=args.scores,
-                output_path=args.output,
-                sample=args.sample,
-            )
+            if args.sample:
+                # The demo build reads only checked-in examples, so its output is reproducible.
+                build.run(
+                    occupations_path=args.occupations,
+                    scores_path=args.scores,
+                    output_path=args.output,
+                    demand_path=EXAMPLES_DIR / "sample_demand.json",
+                    crosswalk_path=None,
+                    manifest_path=None,
+                    sample=True,
+                )
+            else:
+                build.run(
+                    occupations_path=args.occupations,
+                    scores_path=args.scores,
+                    output_path=args.output,
+                    demand_path=args.demand,
+                    crosswalk_path=args.crosswalk,
+                    manifest_path=args.manifest,
+                )
+        elif args.command == "validate":
+            return _run_validate()
+        elif args.command == "evaluate":
+            _run_evaluate(args)
         elif args.command == "all":
             extract.run()
+            try:
+                demand.run()
+            except (extract.ExtractError, requests.exceptions.RequestException) as exc:
+                # Demand is an optional signal; the rest of the pipeline should still run.
+                log.warning("Skipping demand data: %s", exc)
             score.run()
             build.run()
     except KeyboardInterrupt:  # pragma: no cover - interactive
@@ -124,7 +241,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 130
     except requests.exceptions.RequestException as exc:
         # A raw traceback here is almost always "no route to jobsandskills.gov.au",
-        # which is a environment problem rather than a bug.
+        # which is an environment problem rather than a bug.
         log.error("Could not reach %s: %s", extract.JSA_HOST, exc.__class__.__name__)
         log.error(
             "`aujobs extract` needs open internet access to %s — run it locally or in "

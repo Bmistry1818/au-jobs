@@ -1,0 +1,102 @@
+name: Update data and deploy to GitHub Pages
+
+# This is the only workflow that deploys the site. It always rebuilds
+# site/data.json from the live JSA data before publishing, so a push to the
+# site code never ships the six-occupation sample dataset by mistake.
+
+on:
+  schedule:
+    - cron: "17 3 1 * *" # monthly, 03:17 UTC on the 1st
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "src/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/pipeline.yml"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never run two deploys at once, and let an in-flight deploy finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install locked dependencies
+        run: uv sync --locked --no-dev
+
+      # Scores are expensive (one API call per occupation), so carry them between
+      # runs. The restore key matches the newest previous cache.
+      - name: Restore previous scores
+        uses: actions/cache/restore@v4
+        with:
+          path: data/scores.json
+          key: scores-${{ github.run_id }}
+          restore-keys: |
+            scores-
+
+      - name: Extract JSA workbooks
+        run: uv run aujobs extract
+
+      # Demand is an optional signal. If the Internet Vacancy Index cannot be read, the
+      # site still publishes, and its demand panels say the data is not loaded.
+      - name: Read Internet Vacancy Index
+        run: uv run aujobs demand || echo "::warning::Demand data unavailable; publishing without it."
+
+      - name: Score new occupations
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: uv run aujobs score
+
+      # Save even if scoring failed part-way, so the next run resumes from the
+      # checkpoint instead of starting again.
+      - name: Save scores
+        if: always() && hashFiles('data/scores.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: data/scores.json
+          key: scores-${{ github.run_id }}
+
+      - name: Assemble site
+        run: |
+          mkdir -p _site
+          cp -R site/. _site/
+          uv run aujobs build --output _site/data.json
+
+      - name: Refuse to publish an empty dataset
+        run: |
+          python3 - <<'PY'
+          import json, sys
+          meta = json.load(open("_site/data.json"))["meta"]
+          if meta["sample"] or meta["scored_occupations"] == 0:
+              sys.exit(f"Refusing to deploy: {meta}")
+          print(f"Publishing {meta['scored_occupations']} scored occupations")
+          PY
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -24,6 +24,10 @@ OCCUPATIONS_JSON: Final[Path] = DATA_DIR / "occupations.json"
 OCCUPATIONS_CSV: Final[Path] = DATA_DIR / "occupations.csv"
 SCORES_JSON: Final[Path] = DATA_DIR / "scores.json"
 SITE_DATA_JSON: Final[Path] = SITE_DIR / "data.json"
+DEMAND_JSON: Final[Path] = DATA_DIR / "demand.json"
+MANIFEST_JSON: Final[Path] = RAW_DIR / "manifest.json"
+OSCA_CROSSWALK_CSV: Final[Path] = DATA_DIR / "osca_crosswalk.csv"
+EXAMPLES_DIR: Final[Path] = PROJECT_ROOT / "examples"
 
 # Jobs and Skills Australia publishes these as .xlsx downloads whose filenames
 # change with each release, so the download link is discovered at runtime.
@@ -31,6 +35,7 @@ JSA_HOST: Final[str] = "www.jobsandskills.gov.au"
 JSA_BASE_URL: Final[str] = f"https://{JSA_HOST}"
 OCCUPATION_PROFILES_PAGE: Final[str] = f"{JSA_BASE_URL}/data/occupation-and-industry-profiles"
 EMPLOYMENT_PROJECTIONS_PAGE: Final[str] = f"{JSA_BASE_URL}/data/employment-projections"
+IVI_PAGE: Final[str] = f"{JSA_BASE_URL}/work/internet-vacancy-index"
 
 USER_AGENT: Final[str] = "au-jobs/0.1 (+https://github.com/bmistry1818/au-jobs)"
 

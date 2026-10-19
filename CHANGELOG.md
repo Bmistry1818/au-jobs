@@ -6,6 +6,36 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Demand signal from the JSA Internet Vacancy Index (`aujobs demand`): online job
+  ads per occupation for the latest month, with the 12-month change.
+- Snapshot manifest: each downloaded workbook is recorded with its URL, retrieval
+  time and SHA-256, and `aujobs validate` flags files that have changed.
+- Schema validation for every artefact (`aujobs validate`), run before the build writes anything.
+- Task text from the occupation profiles is included in the scoring prompt.
+- Scores record the rubric version they were made under, and stale scores are scored again.
+- Gold-set agreement and variance reporting (`aujobs evaluate`). The gold labels are provisional.
+- OSCA crosswalk loader, which checks rows and rejects conflicts. No mapping is shipped.
+- Site: a bar chart of the largest occupations, a demand-against-exposure scatter,
+  a dated header, and a footer that lists every source with its date and checksum.
+- `docs/DATA_SOURCES.md`, which records each source's licence and status.
+
+### Changed
+
+- Dependencies are locked in `uv.lock`; CI and the pipeline install with
+  `uv sync --locked`.
+- The `anthropic` floor is now `>=0.77.0`, the first release whose
+  `messages.create` accepts `output_config.format`. Verified against the
+  published wheels.
+
+### Fixed
+
+- A 400 from the API only disables structured outputs when the error is about
+  the schema. Other 400s (such as a mistyped model ID) fail immediately instead
+  of silently degrading every remaining occupation.
+- Removed unused `summarise()` helpers.
+
 ## [0.1.0] - 2026-08-09
 
 First packaged release.
@@ -16,7 +46,7 @@ First packaged release.
 - Packaging via `pyproject.toml`, with a `dev` extra for ruff, mypy and pytest.
 - Test suite (no network or API calls) covering parsing, scoring, merging and
   the CLI, plus CI on Python 3.10–3.13.
-- GitHub Actions workflow that publishes `site/` to GitHub Pages.
+- GitHub Actions workflow (`pipeline.yml`) that runs the full pipeline monthly and publishes the site to GitHub Pages.
 - Six-occupation sample dataset in `examples/`, so the site and the tests work
   without an API key.
 - Concurrent, resumable scoring with checkpointing and atomic writes.

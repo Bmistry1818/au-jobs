@@ -23,7 +23,8 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Information Analysis",
 ]
 dependencies = [
-  "anthropic>=0.40.0",
+  # 0.77.0 is the first release whose messages.create accepts output_config.format.
+  "anthropic>=0.77.0",
   "openpyxl>=3.1.2",
   "pandas>=2.2.0",
   "requests>=2.31.0",
@@ -31,6 +32,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+  "httpx2>=2.14",
   "mypy>=1.11",
   "pandas-stubs>=2.2",
   "pytest>=8.2",
@@ -43,7 +45,7 @@ dev = [
 aujobs = "aujobs.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/bmistry1818/au-jobs"
+Homepage = "https://bmistry1818.github.io/au-jobs/"
 Repository = "https://github.com/bmistry1818/au-jobs"
 Issues = "https://github.com/bmistry1818/au-jobs/issues"
 

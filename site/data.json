@@ -10,7 +10,14 @@
       "growth_5yr_pct": null,
       "growth_10yr_pct": null,
       "ai_exposure": 8,
-      "rationale": "Core analysis and documentation tasks are heavily augmented by AI tools already."
+      "rationale": "Core analysis and documentation tasks are heavily augmented by AI tools already.",
+      "osca_code": null,
+      "demand": {
+        "matched_code": "2611",
+        "ads_latest": 1240,
+        "ads_12m_avg": 1300.0,
+        "change_12m_pct": -6.5
+      }
     },
     {
       "anzsco_code": "2544",
@@ -22,7 +29,14 @@
       "growth_5yr_pct": null,
       "growth_10yr_pct": null,
       "ai_exposure": 4,
-      "rationale": "Hands-on patient care and judgement remain central despite AI-assisted documentation."
+      "rationale": "Hands-on patient care and judgement remain central despite AI-assisted documentation.",
+      "osca_code": null,
+      "demand": {
+        "matched_code": "2544",
+        "ads_latest": 9650,
+        "ads_12m_avg": 9100.0,
+        "change_12m_pct": 12.0
+      }
     },
     {
       "anzsco_code": "3222",
@@ -34,7 +48,14 @@
       "growth_5yr_pct": null,
       "growth_10yr_pct": null,
       "ai_exposure": 2,
-      "rationale": "Physical installation and diagnostic work has few AI substitutes today."
+      "rationale": "Physical installation and diagnostic work has few AI substitutes today.",
+      "osca_code": null,
+      "demand": {
+        "matched_code": "3222",
+        "ads_latest": 4120,
+        "ads_12m_avg": 4010.0,
+        "change_12m_pct": 4.2
+      }
     },
     {
       "anzsco_code": "5511",
@@ -46,7 +67,14 @@
       "growth_5yr_pct": null,
       "growth_10yr_pct": null,
       "ai_exposure": 10,
-      "rationale": "Pure data entry is fully automatable with current AI systems."
+      "rationale": "Pure data entry is fully automatable with current AI systems.",
+      "osca_code": null,
+      "demand": {
+        "matched_code": "5511",
+        "ads_latest": 95,
+        "ads_12m_avg": 130.0,
+        "change_12m_pct": -18.4
+      }
     },
     {
       "anzsco_code": "1341",
@@ -58,7 +86,14 @@
       "growth_5yr_pct": null,
       "growth_10yr_pct": null,
       "ai_exposure": 6,
-      "rationale": "Strategic and people-management work is AI-assisted but still human-led."
+      "rationale": "Strategic and people-management work is AI-assisted but still human-led.",
+      "osca_code": null,
+      "demand": {
+        "matched_code": "1341",
+        "ads_latest": 1880,
+        "ads_12m_avg": 1890.0,
+        "change_12m_pct": -2.1
+      }
     },
     {
       "anzsco_code": "8219",
@@ -70,7 +105,14 @@
       "growth_5yr_pct": null,
       "growth_10yr_pct": null,
       "ai_exposure": 1,
-      "rationale": "Outdoor manual labour remains largely outside current AI/automation reach."
+      "rationale": "Outdoor manual labour remains largely outside current AI/automation reach.",
+      "osca_code": null,
+      "demand": {
+        "matched_code": "8219",
+        "ads_latest": 610,
+        "ads_12m_avg": 605.0,
+        "change_12m_pct": 1.3
+      }
     }
   ],
   "meta": {
@@ -78,6 +120,13 @@
     "scored_occupations": 6,
     "total_employment": 740000,
     "avg_ai_exposure_weighted": 4.05,
-    "sample": true
+    "sample": true,
+    "data_as_of": "2026-06",
+    "demand_source_url": "synthetic sample: not JSA data",
+    "demand_synthetic": true,
+    "demand_matched": 6,
+    "osca_mapped": 0,
+    "rubric_version": "f3044f10e3d2",
+    "snapshots": []
   }
 }

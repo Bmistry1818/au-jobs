@@ -77,10 +77,12 @@ flags for each stage.
 
 ## The site
 
-[`site/index.html`](site/index.html) is a single self-contained file: a D3
-treemap, an employment/exposure summary, and per-major-group filter chips. It
-fetches `data.json` from the same directory, so it needs to be served over HTTP
-rather than opened as a `file://` URL.
+[`site/index.html`](site/index.html) is a single self-contained file. It shows a
+treemap of occupations, a bar chart of the largest occupations, and a scatter
+of demand momentum against AI exposure, with per-major-group filters. The header
+gives the data dates, and the footer lists every source with its retrieval date and
+checksum. It fetches `data.json` from the same directory, so it needs to be served over
+HTTP rather than opened as a `file://` URL.
 
 D3 is loaded from cdnjs with a [subresource integrity](https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity)
 hash pinned to 7.9.0. If you bump the version, recompute the hash:
@@ -89,16 +91,35 @@ hash pinned to 7.9.0. If you bump the version, recompute the hash:
 curl -sS https://cdnjs.cloudflare.com/ajax/libs/d3/<version>/d3.min.js | openssl dgst -sha384 -binary | openssl base64 -A
 ```
 
-Pushing to `main` publishes `site/` to GitHub Pages via
-[`.github/workflows/pages.yml`](.github/workflows/pages.yml). Enable it once
-under **Settings → Pages → Source → GitHub Actions**.
+**Live site:** <https://bmistry1818.github.io/au-jobs/>
+
+The site is a GitHub Pages *project* site, so it is served from the `/au-jobs/`
+subpath. Keep every URL in `site/` relative (the page loads `data.json` with
+`fetch("data.json")`) so it works both locally and there.
+
+Deployment is handled by a single workflow,
+[`.github/workflows/pipeline.yml`](.github/workflows/pipeline.yml). It runs the
+full pipeline (extract → score → build) and then publishes. It runs monthly, on
+manual dispatch, and on pushes that change `site/` or `src/`. It never publishes
+the committed sample data: it refuses to deploy unless it has scored occupations.
+
+One-time setup:
+
+1. **Settings → Pages → Build and deployment → Source: GitHub Actions**
+2. **Settings → Secrets and variables → Actions → New repository secret**
+   named `ANTHROPIC_API_KEY`. Without it, the scoring step fails.
+
+Scores are cached between runs, so a monthly rebuild only calls the API for
+occupations it has not scored yet. GitHub deletes caches unused for 7 days; after
+that the next run rescores everything, which costs one API call per occupation.
 
 ## Repository layout
 
 ```
-src/aujobs/       Pipeline package (extract, score, build) and the `aujobs` CLI
-site/             The static treemap; deployed to GitHub Pages
-examples/         Six-occupation sample dataset used by tests and the demo site
+src/aujobs/       Pipeline package and the `aujobs` CLI (one module per stage, plus validate, evaluate, manifest, crosswalk)
+site/             The static dashboard; deployed to GitHub Pages
+examples/         Synthetic sample data, gold labels and a crosswalk template, used by tests and the demo site
+docs/             Data sources, licences and status
 data/             Generated artefacts (gitignored)
 tests/            pytest suite — no network calls, no API calls
 ```

@@ -1,0 +1,13 @@
+{
+  "as_of": "2026-06",
+  "source_url": "synthetic sample: not JSA data",
+  "synthetic": true,
+  "rows": [
+    {"code": "2611", "ads_latest": 1240, "ads_12m_avg": 1300.0, "change_12m_pct": -6.5},
+    {"code": "2544", "ads_latest": 9650, "ads_12m_avg": 9100.0, "change_12m_pct": 12.0},
+    {"code": "3222", "ads_latest": 4120, "ads_12m_avg": 4010.0, "change_12m_pct": 4.2},
+    {"code": "5511", "ads_latest": 95, "ads_12m_avg": 130.0, "change_12m_pct": -18.4},
+    {"code": "1341", "ads_latest": 1880, "ads_12m_avg": 1890.0, "change_12m_pct": -2.1},
+    {"code": "8219", "ads_latest": 610, "ads_12m_avg": 605.0, "change_12m_pct": 1.3}
+  ]
+}

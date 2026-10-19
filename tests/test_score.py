@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import anthropic
-import httpx
+import httpx2 as httpx
 import pytest
 
 from aujobs import score
@@ -91,6 +91,38 @@ def test_score_falls_back_when_structured_outputs_unsupported() -> None:
     assert "format" not in client.messages.calls[1]["output_config"]
 
 
+def _bad_request_with(message: str) -> anthropic.BadRequestError:
+    response = httpx.Response(400, request=httpx.Request("POST", "https://api.anthropic.com/"))
+    return anthropic.BadRequestError(message, response=response, body=None)
+
+
+def test_unrelated_400_does_not_disable_structured_outputs() -> None:
+    client = FakeClient([_bad_request_with("model: claude-typo is not a valid model")])
+    scorer = score.Scorer(client)  # type: ignore[arg-type]
+
+    with pytest.raises(score.ScoringError, match="API rejected"):
+        scorer.score(OCC)
+
+    # Failed fast with no retry, and the schema is still in use for later requests.
+    assert len(client.messages.calls) == 1
+    assert "format" in client.messages.calls[0]["output_config"]
+
+
+def test_score_does_not_drop_schema_for_unrelated_bad_requests() -> None:
+    # A 400 that is not about the schema (e.g. a bad model ID) must not silently
+    # switch the whole run to prompt-guided JSON.
+    response = httpx.Response(400, request=httpx.Request("POST", "https://api.anthropic.com/"))
+    unrelated = anthropic.BadRequestError(
+        "model: claude-typo-9 is not a valid model", response=response, body=None
+    )
+    client = FakeClient([unrelated, FakeResponse('{"score": 2, "rationale": "x"}')])
+    scorer = score.Scorer(client)  # type: ignore[arg-type]
+
+    with pytest.raises(score.ScoringError, match="API rejected"):
+        scorer.score(OCC)
+    assert len(client.messages.calls) == 1
+
+
 def test_score_raises_when_the_request_is_rejected_twice() -> None:
     client = FakeClient([_bad_request(), _bad_request()])
     scorer = score.Scorer(client)  # type: ignore[arg-type]
@@ -148,13 +180,32 @@ def test_load_existing_scores_drops_unscored_entries(tmp_path: Path) -> None:
     write_json_atomic(
         path,
         {
-            "2611": {"title": "Analysts", "score": 8, "rationale": "ok"},
+            "2611": {
+                "title": "Analysts",
+                "score": 8,
+                "rationale": "ok",
+                "rubric": score.RUBRIC_VERSION,
+            },
             "2544": {"title": "Nurses", "score": None, "rationale": "parse_error: ..."},
             "3222": "garbage",
         },
     )
 
     assert list(score.load_existing_scores(path)) == ["2611"]
+
+
+def test_load_existing_scores_rescores_entries_from_an_older_rubric(tmp_path: Path) -> None:
+    # A score made under a different rubric is stale, so it must be scored again.
+    path = tmp_path / "scores.json"
+    write_json_atomic(
+        path,
+        {
+            "2611": {"title": "Analysts", "score": 8, "rationale": "ok", "rubric": "old-rubric"},
+            "3222": {"title": "Electricians", "score": 2, "rationale": "ok"},
+        },
+    )
+
+    assert score.load_existing_scores(path) == {}
 
 
 def test_run_scores_only_missing_occupations(tmp_path: Path) -> None:
@@ -167,7 +218,17 @@ def test_run_scores_only_missing_occupations(tmp_path: Path) -> None:
             {"anzsco_code": "3222", "title": "Electricians"},
         ],
     )
-    write_json_atomic(scores, {"2611": {"title": "Analysts", "score": 8, "rationale": "prior"}})
+    write_json_atomic(
+        scores,
+        {
+            "2611": {
+                "title": "Analysts",
+                "score": 8,
+                "rationale": "prior",
+                "rubric": score.RUBRIC_VERSION,
+            }
+        },
+    )
     client = FakeClient([FakeResponse('{"score": 2, "rationale": "Physical work."}')])
 
     result = score.run(
@@ -238,7 +299,17 @@ def test_run_is_a_no_op_when_everything_is_scored(tmp_path: Path) -> None:
     occupations = tmp_path / "occupations.json"
     scores = tmp_path / "scores.json"
     write_json_atomic(occupations, [{"anzsco_code": "2611", "title": "Analysts"}])
-    write_json_atomic(scores, {"2611": {"title": "Analysts", "score": 8, "rationale": "prior"}})
+    write_json_atomic(
+        scores,
+        {
+            "2611": {
+                "title": "Analysts",
+                "score": 8,
+                "rationale": "prior",
+                "rubric": score.RUBRIC_VERSION,
+            }
+        },
+    )
     client = FakeClient([])
 
     score.run(

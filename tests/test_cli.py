@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import anthropic
-import httpx
+import httpx2 as httpx
 import pytest
 import requests
 

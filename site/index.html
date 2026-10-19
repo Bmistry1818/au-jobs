@@ -4,10 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI Exposure of the Australian Job Market</title>
-<meta name="description" content="Every ANZSCO occupation in Australia, sized by employment and coloured by projected AI exposure.">
+<meta name="description" content="Every ANZSCO occupation in Australia, sized by employment, coloured by AI exposure, and compared with current online job advertising.">
 <meta name="color-scheme" content="dark">
 <meta property="og:title" content="AI Exposure of the Australian Job Market">
-<meta property="og:description" content="Every ANZSCO occupation in Australia, sized by employment and coloured by projected AI exposure.">
+<meta property="og:description" content="Every ANZSCO occupation in Australia, sized by employment, coloured by AI exposure, and compared with current online job advertising.">
 <meta property="og:type" content="website">
 <script
   src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"
@@ -23,6 +23,8 @@
     --muted: #9a9ba5;
     --border: #2a2d36;
     --focus: #7aa2f7;
+    --warn-bg: #2a2410;
+    --warn-text: #e8d9a0;
   }
   * { box-sizing: border-box; }
   body {
@@ -31,26 +33,18 @@
     background: var(--bg);
     color: var(--text);
   }
-  header {
-    padding: 24px 32px 12px;
-    border-bottom: 1px solid var(--border);
-  }
-  h1 {
-    margin: 0 0 4px;
-    font-size: 22px;
-    font-weight: 600;
-  }
-  .subtitle {
-    color: var(--muted);
-    font-size: 14px;
-    margin: 0;
-  }
+  header { padding: 24px 32px 14px; border-bottom: 1px solid var(--border); }
+  h1 { margin: 0 0 4px; font-size: 22px; font-weight: 600; }
+  h2 { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
+  .subtitle { color: var(--muted); font-size: 14px; margin: 0; }
+  .dataset-meta { color: var(--muted); font-size: 12px; margin: 10px 0 0; }
+  .dataset-meta b { color: var(--text); font-weight: 600; }
   .banner {
     margin: 0;
     padding: 10px 32px;
-    background: #2a2410;
+    background: var(--warn-bg);
     border-bottom: 1px solid var(--border);
-    color: #e8d9a0;
+    color: var(--warn-text);
     font-size: 13px;
   }
   .banner[hidden] { display: none; }
@@ -71,35 +65,60 @@
     padding: 12px 32px;
     font-size: 12px;
     color: var(--muted);
+    flex-wrap: wrap;
   }
-  .legend-scale {
-    display: flex;
-    height: 10px;
-    width: 220px;
-    border-radius: 3px;
-    overflow: hidden;
-  }
-  #chart-container { padding: 16px 32px 32px; }
-  #chart { width: 100%; }
-  .cell rect {
-    stroke: var(--bg);
-    stroke-width: 1.5px;
+  .legend-scale { display: flex; height: 10px; width: 220px; border-radius: 3px; overflow: hidden; }
+  .legend-scale div { flex: 1; }
+  #category-filter { padding: 4px 32px 0; display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    padding: 5px 12px;
+    border-radius: 999px;
+    font: inherit;
+    font-size: 12px;
     cursor: pointer;
-    transition: opacity 0.15s;
   }
-  .cell:hover rect,
-  .cell:focus-visible rect {
-    opacity: 0.85;
-    stroke: #fff;
+  .chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .chip[aria-pressed="true"] { background: var(--text); color: var(--bg); border-color: var(--text); }
+
+  section { padding: 20px 32px 8px; }
+  section > p.lede { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+  .panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    padding: 8px 32px 20px;
   }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 16px 10px;
+    min-width: 0;
+  }
+  .panel p.lede { color: var(--muted); font-size: 12px; margin: 0 0 8px; }
+  .panel svg { display: block; width: 100%; height: auto; }
+  .empty { color: var(--muted); font-size: 13px; padding: 24px 4px; margin: 0; }
+
+  #chart { width: 100%; }
+  .cell rect { stroke: var(--bg); stroke-width: 1.5px; cursor: pointer; transition: opacity 0.15s; }
+  .cell:hover rect, .cell:focus-visible rect { opacity: 0.85; stroke: #fff; }
   .cell:focus { outline: none; }
   .cell:focus-visible rect { stroke: var(--focus); stroke-width: 2.5px; }
-  .cell text {
-    fill: rgba(0, 0, 0, 0.85);
-    font-size: 11px;
-    font-weight: 600;
-    pointer-events: none;
-  }
+  .cell text { fill: rgba(0, 0, 0, 0.85); font-size: 11px; font-weight: 600; pointer-events: none; }
+  .bar { cursor: default; }
+  .bar:focus { outline: none; }
+  .bar:focus-visible rect, .bar:hover rect { stroke: var(--focus); stroke-width: 2px; }
+  .dot { cursor: pointer; stroke: var(--bg); stroke-width: 1px; }
+  .dot:hover, .dot:focus-visible { stroke: #fff; stroke-width: 2px; outline: none; }
+  .axis text { fill: var(--muted); font-size: 11px; }
+  .axis path, .axis line { stroke: var(--border); }
+  .axis-label { fill: var(--muted); font-size: 11px; }
+  .zero-line { stroke: var(--muted); stroke-dasharray: 4 4; }
+  .dot-label { fill: var(--text); font-size: 11px; pointer-events: none; }
+
   #tooltip {
     position: fixed;
     display: none;
@@ -108,7 +127,7 @@
     border-radius: 8px;
     padding: 12px 14px;
     font-size: 13px;
-    max-width: 280px;
+    max-width: 290px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
     pointer-events: none;
     z-index: 10;
@@ -116,49 +135,39 @@
   #tooltip .t-title { font-weight: 600; margin-bottom: 6px; font-size: 14px; }
   #tooltip .t-row { display: flex; justify-content: space-between; gap: 16px; color: var(--muted); margin: 2px 0; }
   #tooltip .t-row span:last-child { color: var(--text); }
-  #tooltip .t-rationale { margin-top: 8px; color: var(--muted); font-style: italic; font-size: 12px; }
-  #category-filter {
-    padding: 12px 32px 0;
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-  .chip {
-    border: 1px solid var(--border);
-    background: transparent;
-    color: var(--muted);
-    padding: 5px 12px;
-    border-radius: 999px;
-    font-size: 12px;
-    cursor: pointer;
-    font: inherit;
-    font-size: 12px;
-  }
-  .chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-  .chip[aria-pressed="true"] {
-    background: var(--text);
-    color: var(--bg);
-    border-color: var(--text);
-  }
-  #message {
-    padding: 60px 32px;
-    text-align: center;
-    color: var(--muted);
-    line-height: 1.6;
-  }
+  #tooltip .t-note { margin-top: 8px; color: var(--muted); font-style: italic; font-size: 12px; }
+
+  #message { padding: 60px 32px; text-align: center; color: var(--muted); line-height: 1.6; }
   #message[hidden] { display: none; }
   code { background: var(--panel); padding: 2px 6px; border-radius: 4px; }
+
+  footer {
+    margin-top: 16px;
+    padding: 22px 32px 30px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  footer h2 { color: var(--text); margin-bottom: 8px; }
+  footer ul { margin: 0 0 12px; padding-left: 18px; }
+  footer li { margin: 2px 0; }
+  footer a { color: var(--text); }
+  footer p { margin: 0 0 8px; max-width: 880px; }
+
   .visually-hidden {
-    position: absolute;
-    width: 1px; height: 1px;
-    margin: -1px; padding: 0;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-    border: 0;
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+
+  @media (max-width: 900px) {
+    .panels { grid-template-columns: 1fr; padding-left: 16px; padding-right: 16px; }
   }
   @media (max-width: 640px) {
-    header, .stats, .legend, #category-filter, #chart-container, .banner { padding-left: 16px; padding-right: 16px; }
+    header, .stats, .legend, #category-filter, section, footer, .banner {
+      padding-left: 16px; padding-right: 16px;
+    }
+    .stats { gap: 18px; }
   }
 </style>
 </head>
@@ -166,12 +175,13 @@
 
 <header>
   <h1>AI Exposure of the Australian Job Market</h1>
-  <p class="subtitle">Every ANZSCO occupation, sized by employment, coloured by projected AI exposure (0&ndash;10)</p>
+  <p class="subtitle">Every ANZSCO occupation, sized by employment and coloured by projected AI exposure (0&ndash;10), with current online job advertising alongside.</p>
+  <p class="dataset-meta" id="dataset-meta"></p>
 </header>
 
 <p class="banner" id="sample-banner" hidden>
-  Showing the checked-in <strong>sample dataset</strong> (a handful of occupations).
-  Run the pipeline to generate the full dataset.
+  Showing the checked-in <strong>sample dataset</strong>. The job counts and demand figures are
+  synthetic, so do not read them as real data. Run the pipeline to generate the full dataset.
 </p>
 
 <div class="stats" id="stats"></div>
@@ -179,23 +189,55 @@
 <div class="legend">
   <span>Low exposure</span>
   <div class="legend-scale" role="img" aria-label="Colour scale from green (low AI exposure) to red (high AI exposure)">
-    <div style="flex:1;background:#1a9850"></div>
-    <div style="flex:1;background:#91cf60"></div>
-    <div style="flex:1;background:#d9ef8b"></div>
-    <div style="flex:1;background:#fee08b"></div>
-    <div style="flex:1;background:#fc8d59"></div>
-    <div style="flex:1;background:#d73027"></div>
+    <div style="background:#1a9850"></div>
+    <div style="background:#91cf60"></div>
+    <div style="background:#d9ef8b"></div>
+    <div style="background:#fee08b"></div>
+    <div style="background:#fc8d59"></div>
+    <div style="background:#d73027"></div>
   </div>
   <span>High exposure</span>
 </div>
 
 <div id="category-filter" role="group" aria-label="Filter by ANZSCO major group"></div>
 
-<div id="chart-container">
+<section aria-labelledby="map-heading">
+  <h2 id="map-heading">Map of occupations</h2>
+  <p class="lede">Box area is employment. Colour is AI exposure. Click a major group chip above to focus.</p>
   <div id="chart"></div>
+</section>
+
+<div class="panels">
+  <section class="panel" aria-labelledby="bars-heading">
+    <h2 id="bars-heading">Largest occupations and their exposure</h2>
+    <p class="lede">The 15 largest occupations by employment, coloured by AI exposure.</p>
+    <div id="bars"></div>
+  </section>
+  <section class="panel" aria-labelledby="scatter-heading">
+    <h2 id="scatter-heading">Demand momentum against AI exposure</h2>
+    <p class="lede" id="scatter-lede">Change in online job ads over 12 months, against AI exposure.</p>
+    <div id="scatter"></div>
+  </section>
 </div>
 
 <p id="message" hidden></p>
+
+<footer>
+  <h2>Data sources and dates</h2>
+  <ul id="sources"></ul>
+  <p>
+    Employment, earnings and growth figures are for ANZSCO occupations, as published by
+    <a href="https://www.jobsandskills.gov.au/">Jobs and Skills Australia</a> and licensed under
+    <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. Demand figures count
+    online job advertisements, not all vacancies, so they show momentum rather than headcount.
+  </p>
+  <p>
+    AI exposure scores are model-generated estimates of how much AI is likely to reshape each
+    occupation. They are not forecasts of job losses, and they have not yet been checked against
+    expert labels. Code and methodology:
+    <a href="https://github.com/Bmistry1818/au-jobs">github.com/Bmistry1818/au-jobs</a>.
+  </p>
+</footer>
 
 <div id="tooltip" role="tooltip" aria-hidden="true"></div>
 <div class="visually-hidden" aria-live="polite" id="status"></div>
@@ -204,70 +246,77 @@
 "use strict";
 
 (function () {
-  const COLOR_STOPS = ["#1a9850", "#91cf60", "#d9ef8b", "#fee08b", "#fc8d59", "#d73027"];
-  const CHART_HEIGHT = 640;
-  const MIN_LABEL_WIDTH = 60;
-  const MIN_LABEL_HEIGHT = 24;
-  const PX_PER_CHAR = 6;
+  const COLOUR_STOPS = ["#1a9850", "#91cf60", "#d9ef8b", "#fee08b", "#fc8d59", "#d73027"];
+  // Built on first use: d3 is loaded with `defer`, so it is not yet defined while this script runs.
+  let colourScale = null;
+  function colour(value) {
+    if (!colourScale) colourScale = d3.scaleLinear().domain([0, 2, 4, 6, 8, 10]).range(COLOUR_STOPS);
+    return colourScale(value);
+  }
+  const TREEMAP_HEIGHT = 560;
+  const BAR_ROW = 26;
+  const TOP_BARS = 15;
+  const SOURCE_LABELS = {
+    occupation_profiles: "JSA occupation profiles (employment, earnings, education)",
+    employment_projections: "JSA employment projections (5 and 10 year growth)",
+    internet_vacancy_index: "JSA Internet Vacancy Index (online job advertisements)",
+  };
 
   const tooltipEl = document.getElementById("tooltip");
   const messageEl = document.getElementById("message");
   const statusEl = document.getElementById("status");
+
+  let occupations = [];
   let activeCategory = null;
 
-  function showMessage(html) {
-    messageEl.innerHTML = html;
-    messageEl.hidden = false;
-  }
+  // ---- formatting -------------------------------------------------------
 
-  function fmtNum(value) {
-    return value === null || value === undefined ? "—" : Math.round(value).toLocaleString();
+  function isNum(v) { return typeof v === "number" && Number.isFinite(v); }
+  function fmtNum(v) { return isNum(v) ? Math.round(v).toLocaleString() : "—"; }
+  function fmtMoney(v) { return isNum(v) ? "$" + Math.round(v).toLocaleString() : "—"; }
+  function fmtPct(v, digits = 1) {
+    return isNum(v) ? (v > 0 ? "+" : "") + v.toFixed(digits) + "%" : "—";
   }
-
-  function fmtMoney(value) {
-    return value === null || value === undefined ? "—" : "$" + Math.round(value).toLocaleString();
+  function fmtCompact(v) {
+    if (!isNum(v)) return "—";
+    if (v >= 1e6) return (v / 1e6).toFixed(1) + "m";
+    if (v >= 1e3) return (v / 1e3).toFixed(0) + "k";
+    return String(Math.round(v));
   }
-
-  function fmtPct(value) {
-    return value === null || value === undefined ? "—" : value.toFixed(1) + "%";
+  function truncate(text, max) {
+    const s = String(text ?? "");
+    return s.length > max ? s.slice(0, max - 1) + "…" : s;
   }
+  function shortDate(iso) { return iso ? String(iso).slice(0, 10) : "not recorded"; }
 
-  // Build tooltip content with textContent rather than innerHTML: occupation
-  // titles and rationales are pipeline output, not trusted markup.
-  function row(label, value) {
-    const wrapper = document.createElement("div");
-    wrapper.className = "t-row";
-    const left = document.createElement("span");
-    left.textContent = label;
-    const right = document.createElement("span");
-    right.textContent = value;
-    wrapper.append(left, right);
-    return wrapper;
-  }
+  // ---- tooltip: all text goes in via textContent, since titles and rationales are data
 
-  function tooltipContent(d) {
+  function tooltipBody(title, rows, note) {
     const fragment = document.createDocumentFragment();
-    const title = document.createElement("div");
-    title.className = "t-title";
-    title.textContent = d.title;
-    fragment.append(
-      title,
-      row("ANZSCO", d.anzsco_code),
-      row("Employment", fmtNum(d.employment)),
-      row("Median earnings", fmtMoney(d.median_earnings)),
-      row("5yr growth", fmtPct(d.growth_5yr_pct)),
-      row("AI exposure", d.ai_exposure + "/10")
-    );
-    if (d.rationale) {
-      const rationale = document.createElement("div");
-      rationale.className = "t-rationale";
-      rationale.textContent = d.rationale;
-      fragment.append(rationale);
+    const heading = document.createElement("div");
+    heading.className = "t-title";
+    heading.textContent = title;
+    fragment.append(heading);
+    for (const [label, value] of rows) {
+      const line = document.createElement("div");
+      line.className = "t-row";
+      const left = document.createElement("span");
+      left.textContent = label;
+      const right = document.createElement("span");
+      right.textContent = value;
+      line.append(left, right);
+      fragment.append(line);
+    }
+    if (note) {
+      const noteEl = document.createElement("div");
+      noteEl.className = "t-note";
+      noteEl.textContent = note;
+      fragment.append(noteEl);
     }
     return fragment;
   }
 
-  function positionTooltip(event) {
+  function placeTooltip(event) {
     const margin = 16;
     const rect = tooltipEl.getBoundingClientRect();
     const x = Math.min(event.clientX + margin, window.innerWidth - rect.width - margin);
@@ -276,11 +325,11 @@
     tooltipEl.style.top = Math.max(margin, y) + "px";
   }
 
-  function showTooltip(event, d) {
-    tooltipEl.replaceChildren(tooltipContent(d));
+  function showTooltip(event, title, rows, note) {
+    tooltipEl.replaceChildren(tooltipBody(title, rows, note));
     tooltipEl.style.display = "block";
     tooltipEl.setAttribute("aria-hidden", "false");
-    positionTooltip(event);
+    placeTooltip(event);
   }
 
   function hideTooltip() {
@@ -288,15 +337,110 @@
     tooltipEl.setAttribute("aria-hidden", "true");
   }
 
-  function renderStats(meta, scored) {
+  // Keyboard users get the tooltip anchored to the focused element.
+  function anchorFor(element) {
+    const box = element.getBoundingClientRect();
+    return { clientX: box.left + box.width / 2, clientY: box.bottom };
+  }
+
+  function groupNote(d) {
+    if (d.demand && d.demand.matched_code !== d.anzsco_code) {
+      return `Demand uses the group ${d.demand.matched_code}, which covers this occupation.`;
+    }
+    return "";
+  }
+
+  function occupationRows(d) {
+    const rows = [
+      ["ANZSCO", d.anzsco_code],
+      ["Employment", fmtNum(d.employment)],
+      ["Median earnings", fmtMoney(d.median_earnings)],
+      ["5yr growth", fmtPct(d.growth_5yr_pct)],
+      ["AI exposure", isNum(d.ai_exposure) ? d.ai_exposure + "/10" : "—"],
+    ];
+    if (d.demand) {
+      rows.push(["Online ads, latest month", fmtNum(d.demand.ads_latest)]);
+      rows.push(["Ads, 12-month change", fmtPct(d.demand.change_12m_pct)]);
+    }
+    return rows;
+  }
+
+  function occupationNote(d) {
+    return [d.rationale, groupNote(d)].filter(Boolean).join(" ");
+  }
+
+  // ---- header, stats, sources -------------------------------------------
+
+  function renderHeader(meta) {
+    const el = document.getElementById("dataset-meta");
+    const parts = [];
+    if (meta.data_as_of) parts.push(["Online job ads to ", meta.data_as_of]);
+    const profiles = (meta.snapshots || []).find((s) => s.name === "occupation_profiles");
+    if (profiles) parts.push(["Employment figures retrieved ", shortDate(profiles.retrieved_at)]);
+    if (meta.rubric_version) parts.push(["Scoring rubric ", meta.rubric_version]);
+
+    el.replaceChildren();
+    if (parts.length === 0) {
+      el.textContent = "Data date not recorded.";
+      return;
+    }
+    parts.forEach(([text, value], index) => {
+      if (index > 0) el.append(document.createTextNode(" · "));
+      el.append(document.createTextNode(text));
+      const strong = document.createElement("b");
+      strong.textContent = value;
+      el.append(strong);
+    });
+  }
+
+  function renderSources(meta) {
+    const items = [];
+    for (const snapshot of meta.snapshots || []) {
+      items.push({
+        label: SOURCE_LABELS[snapshot.name] || snapshot.name,
+        details: [`retrieved ${shortDate(snapshot.retrieved_at)}`, `sha256 ${snapshot.sha256}`],
+        url: snapshot.source_url,
+      });
+    }
+    if (meta.data_as_of) {
+      items.push({
+        label: SOURCE_LABELS.internet_vacancy_index,
+        details: [`data to ${meta.data_as_of}`],
+        url: meta.demand_source_url,
+      });
+    }
+    if (items.length === 0) {
+      items.push({ label: "No source snapshots recorded for this build.", details: [], url: null });
+    }
+
+    document.getElementById("sources").replaceChildren(...items.map((item) => {
+      const li = document.createElement("li");
+      const isLink = typeof item.url === "string" && /^https:\/\//.test(item.url);
+      if (isLink) {
+        const link = document.createElement("a");
+        link.href = item.url;
+        link.rel = "noopener noreferrer";
+        link.textContent = item.label;
+        li.append(link);
+      } else {
+        li.append(document.createTextNode(item.label));
+      }
+      const extras = [...item.details];
+      if (item.url && !isLink) extras.push(item.url);
+      if (extras.length) li.append(document.createTextNode(" — " + extras.join(" · ")));
+      return li;
+    }));
+  }
+
+  function renderStats(meta, plottable) {
     const stats = [
       [meta.total_occupations, "occupations"],
-      [meta.scored_occupations ?? scored.length, "scored"],
+      [meta.scored_occupations ?? plottable.length, "scored"],
       [Number(meta.total_employment || 0).toLocaleString(), "total employment"],
       [meta.avg_ai_exposure_weighted ?? "—", "job-weighted avg. AI exposure"],
+      [meta.demand_matched ?? 0, "with online ad data"],
     ];
-    const container = document.getElementById("stats");
-    container.replaceChildren(
+    document.getElementById("stats").replaceChildren(
       ...stats.map(([value, label]) => {
         const block = document.createElement("div");
         const strong = document.createElement("b");
@@ -318,10 +462,7 @@
       chip.setAttribute("aria-pressed", String(label === "All"));
       chip.addEventListener("click", () => {
         activeCategory = label === "All" ? null : label;
-        buttons.forEach((other) => {
-          const pressed = other === chip;
-          other.setAttribute("aria-pressed", String(pressed));
-        });
+        buttons.forEach((other) => other.setAttribute("aria-pressed", String(other === chip)));
         statusEl.textContent = "Showing " + label;
         onChange();
       });
@@ -330,125 +471,226 @@
     container.replaceChildren(...buttons);
   }
 
-  function draw(occupations) {
-    const filtered = activeCategory
-      ? occupations.filter((d) => d.category === activeCategory)
-      : occupations;
+  function visible() {
+    return activeCategory ? occupations.filter((d) => d.category === activeCategory) : occupations;
+  }
 
-    const grouped = d3.groups(filtered, (d) => d.category).map(([category, items]) => ({
-      name: category,
-      children: items,
-    }));
+  // ---- treemap -----------------------------------------------------------
 
-    const root = d3
-      .hierarchy({ name: "root", children: grouped })
+  function drawTreemap(data) {
+    const container = document.getElementById("chart");
+    d3.select(container).html("");
+    if (data.length === 0) return;
+
+    const grouped = d3.groups(data, (d) => d.category).map(([category, items]) => ({ name: category, children: items }));
+    const root = d3.hierarchy({ name: "root", children: grouped })
       .sum((d) => d.employment || 0)
       .sort((a, b) => b.value - a.value);
-
-    const container = document.getElementById("chart");
     const width = Math.max(320, container.clientWidth);
-    const height = CHART_HEIGHT;
+    d3.treemap().size([width, TREEMAP_HEIGHT]).paddingOuter(3).paddingTop(20).paddingInner(2)(root);
 
-    d3.treemap().size([width, height]).paddingOuter(3).paddingTop(20).paddingInner(2)(root);
+    const svg = d3.select(container).append("svg")
+      .attr("width", "100%").attr("height", TREEMAP_HEIGHT)
+      .attr("viewBox", [0, 0, width, TREEMAP_HEIGHT]).attr("role", "img")
+      .attr("aria-label", "Treemap of Australian occupations: box area is employment, colour is AI exposure");
 
-    const colorScale = d3.scaleLinear().domain([0, 2, 4, 6, 8, 10]).range(COLOR_STOPS);
-
-    const svg = d3
-      .select(container)
-      .html("")
-      .append("svg")
-      .attr("width", "100%")
-      .attr("height", height)
-      .attr("viewBox", [0, 0, width, height])
-      .attr("role", "img")
-      .attr("aria-label", "Treemap of Australian occupations by employment and AI exposure");
-
-    svg
-      .selectAll(".group-label")
-      .data(root.children || [])
-      .join("text")
-      .attr("class", "group-label")
-      .attr("x", (d) => d.x0 + 4)
-      .attr("y", (d) => d.y0 + 14)
-      .attr("fill", "#9a9ba5")
-      .attr("font-size", "12px")
-      .attr("font-weight", "600")
+    svg.selectAll(".group-label").data(root.children || []).join("text")
+      .attr("class", "group-label").attr("x", (d) => d.x0 + 4).attr("y", (d) => d.y0 + 14)
+      .attr("fill", "#9a9ba5").attr("font-size", "12px").attr("font-weight", "600")
       .text((d) => d.data.name);
 
-    const leaf = svg
-      .selectAll(".cell")
-      .data(root.leaves())
-      .join("g")
-      .attr("class", "cell")
-      .attr("tabindex", 0)
+    const leaf = svg.selectAll(".cell").data(root.leaves()).join("g")
+      .attr("class", "cell").attr("tabindex", 0)
       .attr("transform", (d) => `translate(${d.x0},${d.y0})`);
 
-    leaf
-      .append("rect")
+    leaf.append("rect")
       .attr("width", (d) => Math.max(0, d.x1 - d.x0))
       .attr("height", (d) => Math.max(0, d.y1 - d.y0))
-      .attr("fill", (d) => colorScale(d.data.ai_exposure))
-      .attr("rx", 2);
+      .attr("fill", (d) => colour(d.data.ai_exposure)).attr("rx", 2);
 
-    // Native SVG tooltip: works for keyboard, screen readers and touch.
-    leaf
-      .append("title")
-      .text(
-        (d) =>
-          `${d.data.title} — ${fmtNum(d.data.employment)} employed, ` +
-          `AI exposure ${d.data.ai_exposure}/10`
-      );
+    leaf.append("title").text((d) =>
+      `${d.data.title}: ${fmtNum(d.data.employment)} employed, AI exposure ${d.data.ai_exposure}/10`);
 
     leaf
-      .on("mousemove", (event, d) => showTooltip(event, d.data))
+      .on("mousemove", (event, d) => showTooltip(event, d.data.title, occupationRows(d.data), occupationNote(d.data)))
       .on("mouseleave", hideTooltip)
-      .on("focus", function (event, d) {
-        const box = this.getBoundingClientRect();
-        showTooltip({ clientX: box.left, clientY: box.bottom }, d.data);
-      })
+      .on("focus", function (_, d) { showTooltip(anchorFor(this), d.data.title, occupationRows(d.data), occupationNote(d.data)); })
       .on("blur", hideTooltip);
 
     leaf.each(function (d) {
       const w = d.x1 - d.x0;
       const h = d.y1 - d.y0;
-      if (w <= MIN_LABEL_WIDTH || h <= MIN_LABEL_HEIGHT) return;
-      const maxChars = Math.floor(w / PX_PER_CHAR);
-      const label =
-        d.data.title.length > maxChars ? d.data.title.slice(0, maxChars) + "…" : d.data.title;
-      d3.select(this).append("text").attr("x", 5).attr("y", 15).text(label);
+      if (w <= 60 || h <= 24) return;
+      d3.select(this).append("text").attr("x", 5).attr("y", 15)
+        .text(truncate(d.data.title, Math.floor(w / 6)));
     });
+  }
+
+  // ---- largest occupations bar chart ------------------------------------
+
+  function drawBars(data) {
+    const container = document.getElementById("bars");
+    d3.select(container).html("");
+    const top = [...data].sort((a, b) => b.employment - a.employment).slice(0, TOP_BARS);
+    if (top.length === 0) {
+      d3.select(container).append("p").attr("class", "empty").text("No occupations to show in this group.");
+      return;
+    }
+
+    const width = Math.max(300, container.clientWidth);
+    const left = Math.min(220, Math.round(width * 0.42));
+    const right = 64;
+    const height = 8 + top.length * BAR_ROW + 8;
+    const x = d3.scaleLinear().domain([0, d3.max(top, (d) => d.employment) || 1]).range([0, width - left - right]);
+
+    const svg = d3.select(container).append("svg")
+      .attr("viewBox", [0, 0, width, height]).attr("width", "100%").attr("height", height)
+      .attr("role", "img")
+      .attr("aria-label", "Bar chart of the largest occupations by employment, coloured by AI exposure");
+
+    const rows = svg.selectAll("g.bar").data(top).join("g")
+      .attr("class", "bar").attr("tabindex", 0)
+      .attr("transform", (_, i) => `translate(0,${8 + i * BAR_ROW})`);
+
+    rows.append("text").attr("x", left - 8).attr("y", BAR_ROW / 2).attr("dy", "0.35em")
+      .attr("text-anchor", "end").attr("fill", "#e8e8ec").attr("font-size", 12)
+      .text((d) => truncate(d.title, left > 180 ? 34 : 22));
+
+    rows.append("rect").attr("x", left).attr("y", 4).attr("height", BAR_ROW - 8)
+      .attr("width", (d) => Math.max(1, x(d.employment)))
+      .attr("fill", (d) => colour(d.ai_exposure)).attr("rx", 2);
+
+    rows.append("text").attr("x", (d) => left + x(d.employment) + 6).attr("y", BAR_ROW / 2).attr("dy", "0.35em")
+      .attr("fill", "#9a9ba5").attr("font-size", 11).text((d) => fmtCompact(d.employment));
+
+    rows
+      .on("mousemove", (event, d) => showTooltip(event, d.title, occupationRows(d), occupationNote(d)))
+      .on("mouseleave", hideTooltip)
+      .on("focus", function (_, d) { showTooltip(anchorFor(this), d.title, occupationRows(d), occupationNote(d)); })
+      .on("blur", hideTooltip);
+  }
+
+  // ---- demand vs exposure scatter ---------------------------------------
+
+  function scatterRows(d) {
+    return [
+      ["AI exposure", d.ai_exposure + "/10"],
+      ["Ads, 12-month change", fmtPct(d.demand.change_12m_pct)],
+      ["Online ads, latest month", fmtNum(d.demand.ads_latest)],
+      ["Employment", fmtNum(d.employment)],
+    ];
+  }
+
+  function drawScatter(data) {
+    const container = document.getElementById("scatter");
+    d3.select(container).html("");
+    const points = data.filter((d) => d.demand && isNum(d.demand.change_12m_pct) && isNum(d.ai_exposure));
+    const lede = document.getElementById("scatter-lede");
+
+    if (points.length === 0) {
+      lede.textContent = "Online job ad data is not loaded for this view.";
+      d3.select(container).append("p").attr("class", "empty")
+        .text("Run `aujobs demand` and then `aujobs build` to add current job advertising.");
+      return;
+    }
+    lede.textContent = "Each circle is an occupation. Across: AI exposure (0–10). Up: change in online ads over the last 12 months. Circle area: employment.";
+
+    const width = Math.max(300, container.clientWidth);
+    const height = Math.min(460, Math.max(300, Math.round(width * 0.8)));
+    const margin = { top: 12, right: 16, bottom: 40, left: 52 };
+    const x = d3.scaleLinear().domain([0, 10]).range([margin.left, width - margin.right]);
+    const [lo, hi] = d3.extent(points, (d) => d.demand.change_12m_pct);
+    const y = d3.scaleLinear()
+      .domain([Math.min(lo, -5), Math.max(hi, 5)]).nice()
+      .range([height - margin.bottom, margin.top]);
+    const r = d3.scaleSqrt().domain([0, d3.max(points, (d) => d.employment) || 1]).range([3, 22]);
+
+    const svg = d3.select(container).append("svg")
+      .attr("viewBox", [0, 0, width, height]).attr("width", "100%").attr("height", height)
+      .attr("role", "img")
+      .attr("aria-label", "Scatter plot of AI exposure against the 12-month change in online job ads");
+
+    svg.append("g").attr("class", "axis").attr("transform", `translate(0,${height - margin.bottom})`)
+      .call(d3.axisBottom(x).ticks(10).tickSizeOuter(0));
+    svg.append("g").attr("class", "axis").attr("transform", `translate(${margin.left},0)`)
+      .call(d3.axisLeft(y).ticks(6).tickFormat((v) => v + "%").tickSizeOuter(0));
+    svg.append("text").attr("class", "axis-label")
+      .attr("x", (margin.left + width - margin.right) / 2).attr("y", height - 6)
+      .attr("text-anchor", "middle").text("AI exposure (0–10)");
+    svg.append("text").attr("class", "axis-label").attr("transform", "rotate(-90)")
+      .attr("x", -(margin.top + height - margin.bottom) / 2).attr("y", 14)
+      .attr("text-anchor", "middle").text("Online ads, 12-month change");
+
+    svg.append("line").attr("class", "zero-line")
+      .attr("x1", margin.left).attr("x2", width - margin.right)
+      .attr("y1", y(0)).attr("y2", y(0));
+
+    const dots = svg.selectAll("circle.dot").data(points).join("circle")
+      .attr("class", "dot").attr("tabindex", 0)
+      .attr("cx", (d) => x(d.ai_exposure))
+      .attr("cy", (d) => y(d.demand.change_12m_pct))
+      .attr("r", (d) => r(d.employment))
+      .attr("fill", (d) => colour(d.ai_exposure))
+      .attr("fill-opacity", 0.8);
+
+    const largest = [...points].sort((a, b) => b.employment - a.employment).slice(0, 6);
+    // Labels flip to the left of their circle near the right edge, so they are not clipped.
+    const nearRightEdge = (d) => x(d.ai_exposure) > width - margin.right - 130;
+    svg.selectAll("text.dot-label").data(largest).join("text")
+      .attr("class", "dot-label")
+      .attr("text-anchor", (d) => (nearRightEdge(d) ? "end" : "start"))
+      .attr("x", (d) => x(d.ai_exposure) + (nearRightEdge(d) ? -1 : 1) * (r(d.employment) + 3))
+      .attr("y", (d) => y(d.demand.change_12m_pct) + 4)
+      .text((d) => truncate(d.title, 22));
+
+    dots
+      .on("mousemove", (event, d) => showTooltip(event, d.title, scatterRows(d), groupNote(d)))
+      .on("mouseleave", hideTooltip)
+      .on("focus", function (_, d) { showTooltip(anchorFor(this), d.title, scatterRows(d), groupNote(d)); })
+      .on("blur", hideTooltip);
+  }
+
+  // ---- orchestration ----------------------------------------------------
+
+  function drawAll() {
+    const data = visible();
+    drawTreemap(data);
+    drawBars(data);
+    drawScatter(data);
   }
 
   function render(payload) {
     const meta = payload.meta || {};
     const all = Array.isArray(payload.occupations) ? payload.occupations : [];
-    const plottable = all.filter((d) => d.employment > 0 && Number.isFinite(d.ai_exposure));
+    occupations = all.filter((d) => d.employment > 0 && isNum(d.ai_exposure));
 
     document.getElementById("sample-banner").hidden = !meta.sample;
-    renderStats(meta, plottable);
+    renderHeader(meta);
+    renderStats(meta, occupations);
+    renderSources(meta);
 
-    if (plottable.length === 0) {
-      showMessage(
-        "No scored occupations with employment data to plot yet.<br>" +
-          "Run <code>aujobs score</code> and then <code>aujobs build</code>."
-      );
+    if (occupations.length === 0) {
+      messageEl.innerHTML = "No scored occupations with employment data to plot yet.<br>" +
+        "Run <code>aujobs score</code> and then <code>aujobs build</code>.";
+      messageEl.hidden = false;
       return;
     }
 
-    const categories = [...new Set(plottable.map((d) => d.category))].sort();
-    renderChips(categories, () => draw(plottable));
-    draw(plottable);
+    const categories = [...new Set(occupations.map((d) => d.category))].sort();
+    renderChips(categories, drawAll);
+    drawAll();
 
     let resizeTimer;
     window.addEventListener("resize", () => {
       window.clearTimeout(resizeTimer);
-      resizeTimer = window.setTimeout(() => draw(plottable), 150);
+      resizeTimer = window.setTimeout(drawAll, 150);
     });
   }
 
   function start() {
     if (typeof d3 === "undefined") {
-      showMessage("Could not load the D3 library. Check your network connection and reload.");
+      messageEl.textContent = "Could not load the D3 library. Check your network connection and reload.";
+      messageEl.hidden = false;
       return;
     }
     fetch("data.json", { cache: "no-cache" })
@@ -458,12 +700,10 @@
       })
       .then(render)
       .catch((error) => {
-        showMessage(
-          "Could not load <code>data.json</code> (" +
-            String(error.message) +
-            ").<br>Run <code>aujobs extract</code> → <code>aujobs score</code> → " +
-            "<code>aujobs build</code>, and serve this directory over HTTP."
-        );
+        messageEl.innerHTML = "Could not load <code>data.json</code> (" + String(error.message) +
+          ").<br>Run <code>aujobs extract</code> → <code>aujobs score</code> → <code>aujobs build</code>, " +
+          "and serve this directory over HTTP.";
+        messageEl.hidden = false;
       });
   }
 

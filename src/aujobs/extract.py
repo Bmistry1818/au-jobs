@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
@@ -29,6 +29,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from aujobs import manifest
 from aujobs.config import (
     EMPLOYMENT_PROJECTIONS_PAGE,
     JSA_HOST,
@@ -58,6 +59,7 @@ OUTPUT_COLUMNS = [
     "education",
     "growth_5yr_pct",
     "growth_10yr_pct",
+    "description",
 ]
 
 
@@ -210,6 +212,9 @@ def parse_occupation_profiles(xlsx_path: Path) -> pd.DataFrame:
     employment_col = _require_column(sheet, "employment", "employ")
     earnings_col = _find_column(sheet, "median", "earn") or _find_column(sheet, "median", "income")
     education_col = _find_column(sheet, "education") or _find_column(sheet, "qualification")
+    # Task text is the best input the scorer has; it is optional because the column
+    # name varies between releases.
+    description_col = _find_column(sheet, "task") or _find_column(sheet, "description")
 
     parsed = pd.DataFrame(
         {
@@ -219,6 +224,9 @@ def parse_occupation_profiles(xlsx_path: Path) -> pd.DataFrame:
             "median_earnings": (_to_numeric(sheet[earnings_col]) if earnings_col else pd.NA),
             "education": (
                 sheet[education_col].astype("string").str.strip() if education_col else pd.NA
+            ),
+            "description": (
+                sheet[description_col].astype("string").str.strip() if description_col else pd.NA
             ),
         }
     )
@@ -312,6 +320,17 @@ def run(
         projections_path = download(
             session, projections_url, raw_dir / "employment_projections.xlsx"
         )
+        # Record each download with its checksum so published figures trace to an exact file.
+        manifest_path = raw_dir / "manifest.json"
+        manifest.record(
+            "occupation_profiles", profiles_path, profiles_url, manifest_path=manifest_path
+        )
+        manifest.record(
+            "employment_projections",
+            projections_path,
+            projections_url,
+            manifest_path=manifest_path,
+        )
 
     profiles = parse_occupation_profiles(profiles_path)
     log.info("Parsed %d occupation profiles", len(profiles))
@@ -321,12 +340,6 @@ def run(
     merged = merge(profiles, projections)
     write_outputs(merged, json_path=json_path, csv_path=csv_path)
     return merged
-
-
-def summarise(frame: pd.DataFrame) -> Iterable[str]:  # pragma: no cover - cosmetic
-    total = frame["employment"].sum(skipna=True)
-    yield f"{len(frame)} occupations"
-    yield f"{total:,.0f} total employment"
 
 
 __all__: Sequence[str] = (

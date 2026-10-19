@@ -12,10 +12,11 @@ Needs ``ANTHROPIC_API_KEY`` in the environment (or a profile from
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import threading
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
@@ -89,6 +90,17 @@ SCORE_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
 }
 
+#: Describes how an occupation is presented to the model. Bump it when the prompt
+#: layout changes, so that scores made under the old layout are re-scored.
+PROMPT_LAYOUT = "title+code+tasks-v2"
+#: Identifies the rubric, schema and prompt layout together. A score recorded under a
+#: different version is stale, so editing the rubric never mixes two standards.
+RUBRIC_VERSION = hashlib.sha256(
+    (RUBRIC + json.dumps(SCORE_SCHEMA, sort_keys=True) + PROMPT_LAYOUT).encode("utf-8")
+).hexdigest()[:12]
+#: Task text longer than this is truncated before it is sent to the model.
+MAX_DESCRIPTION_CHARS = 1200
+
 
 class ScoringError(RuntimeError):
     """Raised when a single occupation could not be scored."""
@@ -98,6 +110,7 @@ class ScoringError(RuntimeError):
 class Occupation:
     anzsco_code: str
     title: str
+    description: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,9 +118,15 @@ class Score:
     title: str
     score: int
     rationale: str
+    rubric: str = RUBRIC_VERSION
 
     def as_record(self) -> dict[str, object]:
-        return {"title": self.title, "score": self.score, "rationale": self.rationale}
+        return {
+            "title": self.title,
+            "score": self.score,
+            "rationale": self.rationale,
+            "rubric": self.rubric,
+        }
 
 
 def load_occupations(path: Path = OCCUPATIONS_JSON) -> list[Occupation]:
@@ -119,8 +138,9 @@ def load_occupations(path: Path = OCCUPATIONS_JSON) -> list[Occupation]:
     for row in read_json(path):
         code = str(row.get("anzsco_code") or "").strip()
         title = str(row.get("title") or "").strip()
+        description = str(row.get("description") or "").strip() or None
         if code and title:
-            occupations.append(Occupation(anzsco_code=code, title=title))
+            occupations.append(Occupation(anzsco_code=code, title=title, description=description))
     return occupations
 
 
@@ -131,11 +151,14 @@ def load_existing_scores(path: Path = SCORES_JSON) -> dict[str, dict[str, object
     scores = read_json(path)
     if not isinstance(scores, dict):
         raise ValueError(f"{path} should contain a JSON object keyed by ANZSCO code.")
-    # Drop malformed or unscored entries so they are retried.
+    # Drop malformed, unscored and stale entries (scored under a different rubric)
+    # so they are retried.
     return {
         code: entry
         for code, entry in scores.items()
-        if isinstance(entry, dict) and isinstance(entry.get("score"), int)
+        if isinstance(entry, dict)
+        and isinstance(entry.get("score"), int)
+        and entry.get("rubric") == RUBRIC_VERSION
     }
 
 
@@ -160,6 +183,22 @@ def _parse_payload(text: str) -> tuple[int, str]:
     if not MIN_SCORE <= score <= MAX_SCORE:
         raise ScoringError(f"score {score} outside {MIN_SCORE}-{MAX_SCORE}")
     return score, rationale
+
+
+#: Substrings that identify a 400 caused by the output schema rather than the request as a whole.
+_SCHEMA_REJECTION_MARKERS = ("output_config", "json_schema", "structured output")
+
+
+def _is_schema_rejection(exc: anthropic.BadRequestError) -> bool:
+    message = str(exc).lower()
+    return any(marker in message for marker in _SCHEMA_REJECTION_MARKERS)
+
+
+def build_prompt(occupation: Occupation) -> str:
+    lines = [f"Occupation: {occupation.title} (ANZSCO {occupation.anzsco_code})"]
+    if occupation.description:
+        lines.append(f"Tasks and description: {occupation.description[:MAX_DESCRIPTION_CHARS]}")
+    return "\n".join(lines)
 
 
 class Scorer:
@@ -200,7 +239,7 @@ class Scorer:
                 )
 
     def score(self, occupation: Occupation) -> Score:
-        prompt = f"Occupation: {occupation.title} (ANZSCO {occupation.anzsco_code})"
+        prompt = build_prompt(occupation)
 
         for attempt in range(2):
             try:
@@ -213,7 +252,10 @@ class Scorer:
                     messages=[{"role": "user", "content": prompt}],
                 )
             except anthropic.BadRequestError as exc:
-                if self._structured_outputs and attempt == 0:
+                # Only a 400 about the schema justifies dropping it. Any other 400
+                # (bad model ID, malformed request) should fail loudly rather than
+                # quietly degrade every remaining occupation.
+                if self._structured_outputs and attempt == 0 and _is_schema_rejection(exc):
                     self._disable_structured_outputs(str(exc)[:120])
                     continue
                 raise ScoringError(f"API rejected the request: {exc}") from exc
@@ -307,10 +349,6 @@ def run(
     if failures:
         log.warning("Re-run `aujobs score` to retry the %d failed occupations.", failures)
     return scores
-
-
-def summarise(scores: dict[str, dict[str, object]]) -> Iterable[str]:  # pragma: no cover
-    yield f"{len(scores)} occupations scored"
 
 
 __all__: Sequence[str] = (
