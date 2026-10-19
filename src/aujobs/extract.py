@@ -1,16 +1,21 @@
 """Stage 1 — download and parse Jobs and Skills Australia (JSA) workbooks.
 
 Produces ``data/occupations.json`` and ``data/occupations.csv``, one row per
-ANZSCO 4-digit occupation.
+ANZSCO 4-digit occupation (unit group).
+
+The ANZSCO occupation workbook is split into one table per topic (employment,
+earnings, qualifications, tasks), and the projections workbook is split the same
+way. Each table is found by its headings, so the parser does not depend on sheet
+names or positions. Each table is then joined on the 4-digit code.
 
 Two things about the JSA source shape the design here:
 
 * JSA renames the ``.xlsx`` downloads with each release (adding the release
-  month), so the download URL is discovered from the data page at runtime
-  rather than hardcoded.
-* Column headers vary between releases, so columns are located by keyword
-  rather than exact match. If a future release renames things enough to break
-  this, :func:`parse_occupation_profiles` and
+  month), so the download URL is discovered from the data page at runtime.
+  Where a page links several workbooks (the OSCA and ANZSCO files share one page),
+  the link is chosen by name.
+* Column headers and table layouts change between releases. If a future release
+  breaks the parser, :func:`parse_occupation_profiles` and
   :func:`parse_employment_projections` are the two functions to fix.
 
 Requires outbound network access to ``jobsandskills.gov.au``.
@@ -45,10 +50,10 @@ log = logging.getLogger(__name__)
 
 PAGE_TIMEOUT = 30
 DOWNLOAD_TIMEOUT = 120
-#: How many leading rows to scan when looking for the header row of a sheet.
+#: How many leading rows to scan when looking for a table's header row.
 HEADER_SCAN_ROWS = 12
-#: ANZSCO 4-digit occupation codes. Anything else (major/sub-major group
-#: subtotals, "Total", footnotes) is dropped.
+#: ANZSCO 4-digit unit-group codes. Anything else (major, sub-major and minor groups,
+#: six-digit occupations, footnotes) is dropped.
 ANZSCO_CODE_RE = re.compile(r"^\d{4}$")
 
 OUTPUT_COLUMNS = [
@@ -128,22 +133,27 @@ def download(session: requests.Session, url: str, dest: Path) -> Path:
     return dest
 
 
-def _find_header_row(frame: pd.DataFrame) -> int | None:
-    """Index of the first row that looks like a header (mentions "anzsco")."""
-    for i in range(len(frame)):
-        if any("anzsco" in str(value).lower() for value in frame.iloc[i]):
-            return i
+def _find_header_row(frame: pd.DataFrame, keywords: Sequence[str]) -> int | None:
+    """Index of the first row that mentions "anzsco" and every keyword."""
+    for index in range(len(frame)):
+        cells = " | ".join(str(value).lower() for value in frame.iloc[index])
+        if "anzsco" in cells and all(keyword in cells for keyword in keywords):
+            return index
     return None
 
 
-def _load_anzsco_sheet(xlsx_path: Path) -> pd.DataFrame:
-    """Return the largest sheet in the workbook that has an ANZSCO header row."""
+def _find_table(xlsx_path: Path, *keywords: str) -> pd.DataFrame:
+    """Return the largest sheet whose header row mentions "anzsco" and every keyword.
+
+    The workbook has one table per topic, so each parser asks for the table it needs
+    by its headings rather than by sheet name.
+    """
+    best: pd.DataFrame | None = None
+    best_sheet = ""
     with pd.ExcelFile(xlsx_path) as workbook:
-        best: pd.DataFrame | None = None
-        best_sheet = ""
         for sheet in workbook.sheet_names:
             preview = pd.read_excel(workbook, sheet_name=sheet, header=None, nrows=HEADER_SCAN_ROWS)
-            header_row = _find_header_row(preview)
+            header_row = _find_header_row(preview, keywords)
             if header_row is None:
                 continue
             frame = pd.read_excel(workbook, sheet_name=sheet, header=header_row)
@@ -151,8 +161,9 @@ def _load_anzsco_sheet(xlsx_path: Path) -> pd.DataFrame:
                 best, best_sheet = frame, str(sheet)
 
     if best is None:
+        wanted = " and ".join(["'anzsco'", *(f"'{keyword}'" for keyword in keywords)])
         raise ExtractError(
-            f"No sheet in {xlsx_path.name} has a header row mentioning 'ANZSCO'. "
+            f"No table in {xlsx_path.name} has a header row mentioning {wanted}. "
             "The workbook layout has probably changed."
         )
     log.debug("Using sheet %r from %s (%d rows)", best_sheet, xlsx_path.name, len(best))
@@ -190,7 +201,7 @@ def _to_numeric(series: pd.Series) -> pd.Series:
 
 
 def _normalise_codes(series: pd.Series) -> pd.Series:
-    """Render ANZSCO codes as 4-character strings (``2611.0`` -> ``2611``)."""
+    """Render ANZSCO codes as strings (``2611.0`` -> ``2611``)."""
     return (
         series.astype("string")
         .str.strip()
@@ -200,78 +211,126 @@ def _normalise_codes(series: pd.Series) -> pd.Series:
 
 
 def _keep_valid_codes(frame: pd.DataFrame) -> pd.DataFrame:
-    valid = frame["anzsco_code"].str.fullmatch(ANZSCO_CODE_RE).fillna(False)
+    valid = frame["anzsco_code"].str.fullmatch(ANZSCO_CODE_RE).fillna(False).astype(bool)
     dropped = int((~valid).sum())
     if dropped:
         log.debug("Dropped %d rows without a 4-digit ANZSCO code", dropped)
     return frame.loc[valid].copy()
 
 
-def parse_occupation_profiles(xlsx_path: Path) -> pd.DataFrame:
-    """Parse employment, median earnings and education level per occupation."""
-    sheet = _load_anzsco_sheet(xlsx_path)
+def _level_label(name: object) -> str | None:
+    """Turn a qualification column header such as ``"Bachelor degree\\n(%)"`` into a label."""
+    if not isinstance(name, str):
+        return None
+    cleaned = re.sub(r"\(%\)", "", name.replace("\n", " "))
+    return re.sub(r"\s+", " ", cleaned).strip(" /") or None
 
-    code_col = _require_column(sheet, "ANZSCO code", "anzsco")
-    title_col = _find_column(sheet, "occupation") or _find_column(sheet, "title")
-    if title_col is None:
-        raise ExtractError(
-            "Could not find an occupation title column (keywords: 'occupation' or 'title'). "
-            f"Columns present: {', '.join(str(c) for c in sheet.columns[:20])}"
-        )
-    employment_col = _require_column(sheet, "employment", "employ")
-    earnings_col = _find_column(sheet, "median", "earn") or _find_column(sheet, "median", "income")
-    education_col = _find_column(sheet, "education") or _find_column(sheet, "qualification")
-    # Task text is the best input the scorer has; it is optional because the column
-    # name varies between releases.
-    description_col = _find_column(sheet, "task") or _find_column(sheet, "description")
 
-    parsed = pd.DataFrame(
+def _education_per_occupation(xlsx_path: Path) -> pd.DataFrame:
+    """The most common qualification level per occupation, from the share table."""
+    table = _find_table(xlsx_path, "bachelor")
+    code_col = _require_column(table, "ANZSCO code", "anzsco")
+    title_col = _find_column(table, "occupation")
+    level_cols = [column for column in table.columns if column not in {code_col, title_col}]
+    shares = pd.DataFrame(
+        {column: _to_numeric(table[column]) for column in level_cols}, index=table.index
+    )
+    top_level = shares.fillna(-1).idxmax(axis=1).where(shares.max(axis=1).notna())
+    frame = pd.DataFrame(
         {
-            "anzsco_code": _normalise_codes(sheet[code_col]),
-            "title": sheet[title_col].astype("string").str.strip(),
-            "employment": _to_numeric(sheet[employment_col]),
-            "median_earnings": (_to_numeric(sheet[earnings_col]) if earnings_col else pd.NA),
-            "education": (
-                sheet[education_col].astype("string").str.strip() if education_col else pd.NA
-            ),
-            "description": (
-                sheet[description_col].astype("string").str.strip() if description_col else pd.NA
-            ),
+            "anzsco_code": _normalise_codes(table[code_col]),
+            "education": top_level.map(_level_label),
         }
     )
-    parsed = parsed.dropna(subset=["anzsco_code", "title"])
-    parsed = _keep_valid_codes(parsed)
-    return parsed.drop_duplicates(subset="anzsco_code", keep="first")
+    frame = _keep_valid_codes(frame)
+    return frame.drop_duplicates(subset="anzsco_code", keep="first")
+
+
+def _tasks_per_occupation(xlsx_path: Path) -> pd.DataFrame:
+    """All task statements for an occupation, joined into one text field.
+
+    The tasks table has one row per task, so an occupation can span many rows.
+    """
+    table = _find_table(xlsx_path, "tasks")
+    code_col = _require_column(table, "ANZSCO code", "anzsco")
+    tasks_col = _require_column(table, "tasks", "tasks")
+    frame = pd.DataFrame(
+        {
+            "anzsco_code": _normalise_codes(table[code_col]),
+            "task": table[tasks_col].astype("string").str.strip(),
+        }
+    )
+    frame = _keep_valid_codes(frame.dropna(subset=["task"]))
+    grouped = frame.groupby("anzsco_code", sort=False)["task"].agg(
+        lambda tasks: "; ".join(dict.fromkeys(str(task) for task in tasks))
+    )
+    return grouped.rename("description").reset_index()
+
+
+def parse_occupation_profiles(xlsx_path: Path) -> pd.DataFrame:
+    """Join the workbook's topic tables into one row per 4-digit occupation.
+
+    Employment, weekly earnings and the occupation title come from the table with
+    "Employed". The most common qualification comes from the table with "Bachelor",
+    and the task text from the table with "Tasks".
+    """
+    summary = _find_table(xlsx_path, "employed")
+    code_col = _require_column(summary, "ANZSCO code", "anzsco")
+    title_col = _require_column(summary, "occupation title", "occupation")
+    employment_col = _require_column(summary, "employment", "employed")
+    earnings_col = _find_column(summary, "median", "weekly", "earn")
+
+    base = pd.DataFrame(
+        {
+            "anzsco_code": _normalise_codes(summary[code_col]),
+            "title": summary[title_col].astype("string").str.strip(),
+            "employment": _to_numeric(summary[employment_col]),
+            "median_earnings": (_to_numeric(summary[earnings_col]) if earnings_col else pd.NA),
+        }
+    )
+    base = _keep_valid_codes(base.dropna(subset=["title"]))
+    base = base.drop_duplicates(subset="anzsco_code", keep="first")
+
+    return base.merge(_education_per_occupation(xlsx_path), on="anzsco_code", how="left").merge(
+        _tasks_per_occupation(xlsx_path), on="anzsco_code", how="left"
+    )
+
+
+def _percent_after(table: pd.DataFrame, column: str) -> pd.Series:
+    """The percentage column JSA places directly after a change-level column.
+
+    The percentages are stored as fractions (0.0766 means 7.66%), so they are scaled.
+    """
+    position = list(table.columns).index(column)
+    if position + 1 >= len(table.columns):
+        return pd.Series(pd.NA, index=table.index, dtype="Float64")
+    return _to_numeric(table.iloc[:, position + 1]) * 100
 
 
 def parse_employment_projections(xlsx_path: Path) -> pd.DataFrame:
-    """Parse 5-year and 10-year projected employment growth per occupation."""
-    sheet = _load_anzsco_sheet(xlsx_path)
+    """Parse 5-year and 10-year projected employment growth per unit group.
 
-    code_col = _require_column(sheet, "ANZSCO code", "anzsco")
-    five_year_col = (
-        _find_column(sheet, "five year")
-        or _find_column(sheet, "5 year")
-        or _find_column(sheet, "growth")
-    )
-    ten_year_col = _find_column(sheet, "ten year") or _find_column(sheet, "10 year")
+    Only rows that are not "not further defined" (NFD) are kept, so each unit group
+    appears once.
+    """
+    table = _find_table(xlsx_path, "5-year change")
+    code_col = _require_column(table, "ANZSCO code", "anzsco")
+    five_year_col = _require_column(table, "5-year change", "5-year change")
+    ten_year_col = _require_column(table, "10-year change", "10-year change")
 
-    if five_year_col is None and ten_year_col is None:
-        raise ExtractError(
-            "Could not find a projected growth column in the projections workbook. "
-            f"Columns present: {', '.join(str(c) for c in sheet.columns[:20])}"
-        )
-
-    parsed = pd.DataFrame(
+    frame = pd.DataFrame(
         {
-            "anzsco_code": _normalise_codes(sheet[code_col]),
-            "growth_5yr_pct": (_to_numeric(sheet[five_year_col]) if five_year_col else pd.NA),
-            "growth_10yr_pct": (_to_numeric(sheet[ten_year_col]) if ten_year_col else pd.NA),
+            "anzsco_code": _normalise_codes(table[code_col]),
+            "growth_5yr_pct": _percent_after(table, five_year_col),
+            "growth_10yr_pct": _percent_after(table, ten_year_col),
         }
     )
-    parsed = parsed.dropna(subset=["anzsco_code"])
-    parsed = _keep_valid_codes(parsed)
-    return parsed.drop_duplicates(subset="anzsco_code", keep="first")
+    nfd_col = _find_column(table, "nfd")
+    if nfd_col is not None:
+        is_defined = table[nfd_col].astype("string").str.strip().str.upper().eq("N")
+        frame = frame[is_defined.fillna(False).astype(bool)]
+    frame = _keep_valid_codes(frame)
+    return frame.drop_duplicates(subset="anzsco_code", keep="first")
 
 
 def merge(profiles: pd.DataFrame, projections: pd.DataFrame) -> pd.DataFrame:

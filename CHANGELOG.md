@@ -23,6 +23,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The extract stage reads JSA's current ANZSCO workbook, which is split into one
+  table per topic. Each table is found by its headings and joined on the 4-digit
+  code. Education is now the most common qualification level, and task text is
+  joined from the tasks table. Growth percentages are read from the projections
+  table. Median earnings are weekly (`median_earnings` is in dollars per week),
+  and the site labels them that way.
 - Dependencies are locked in `uv.lock`; CI and the pipeline install with
   `uv sync --locked`.
 - The `anthropic` floor is now `>=0.77.0`, the first release whose

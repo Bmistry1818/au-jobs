@@ -36,13 +36,6 @@ def test_find_xlsx_link_resolves_relative_urls() -> None:
     assert url == "https://www.jobsandskills.gov.au/sites/default/files/profiles_may_2025.xlsx"
 
 
-def test_find_xlsx_link_accepts_absolute_same_host_urls() -> None:
-    href = "https://www.jobsandskills.gov.au/files/x.xlsx"
-    session = FakeSession(f"<a href='{href}'>x</a>")
-
-    assert extract.find_xlsx_link(session, PAGE) == href  # type: ignore[arg-type]
-
-
 def test_find_xlsx_link_rejects_offsite_downloads() -> None:
     session = FakeSession('<a href="https://evil.example.com/payload.xlsx">Download</a>')
 
@@ -57,90 +50,129 @@ def test_find_xlsx_link_errors_when_page_has_no_workbook() -> None:
         extract.find_xlsx_link(session, PAGE)  # type: ignore[arg-type]
 
 
-def _write_workbook(
-    path: Path, preamble_rows: int, header: list[str], rows: list[list[Any]]
-) -> Path:
-    """Write an .xlsx with junk rows above the header, as JSA workbooks have."""
-    body = [["Some JSA preamble", None, None]] * preamble_rows + [header, *rows]
-    frame = pd.DataFrame(body)
-    frame.to_excel(path, index=False, header=False, sheet_name="Data")
+# ---- synthetic workbooks laid out like the JSA ANZSCO release -----------------------
+
+PREAMBLE = [[None, None, None]] * 6  # JSA puts title rows above each table header.
+
+
+def _write_tables(path: Path, tables: dict[str, list[list[Any]]]) -> Path:
+    with pd.ExcelWriter(path) as writer:
+        for name, rows in tables.items():
+            pd.DataFrame(rows).to_excel(writer, sheet_name=name, header=False, index=False)
     return path
+
+
+def _profiles_tables(*, include_tasks: bool = True) -> dict[str, list[list[Any]]]:
+    tables: dict[str, list[list[Any]]] = {
+        "Contents": [["Contents"]],
+        "Table_1": [
+            *PREAMBLE,
+            ["ANZSCO Code", "Occupation", "Employed", "Median weekly earnings ($)"],
+            ["1111", "Chief Executives", "63,000", 2100],
+            ["1112", "General Managers", "69300", None],
+            # Six-digit occupation and total row: both must be dropped.
+            ["111111", "Chief Executive (six digit)", "1", 1],
+            ["Total", "All occupations", "14000000", None],
+        ],
+        "Table_8": [
+            *PREAMBLE,
+            ["ANZSCO Code", "Occupation", "Bachelor degree\n(%)", "Year 12\n(%)"],
+            ["1111", "Chief Executives", 60, 20],
+            ["1112", "General Managers", 10, 80],
+        ],
+    }
+    if include_tasks:
+        tables["Table_3"] = [
+            *PREAMBLE,
+            ["ANZSCO Code", "Occupation", "Tasks"],
+            ["1111", "Chief Executives", "Determining objectives"],
+            ["1111", "Chief Executives", "Providing direction"],
+            ["1111", "Chief Executives", "Determining objectives"],  # repeated: kept once
+            ["1112", "General Managers", "Planning operations"],
+        ]
+    return tables
+
+
+def _projections_tables() -> dict[str, list[list[Any]]]:
+    return {
+        "Table_6 Occupation Unit Group": [
+            *PREAMBLE,
+            ["Title", None, None, None, None, None, None, None, None],
+            ["Units row", None, None, None, None, None, None, None, None],
+            [
+                "Occupation Level",
+                "NFD Indicator",
+                "ANZSCO Code",
+                "Occupation",
+                "Baseline",
+                "5-Year Change",
+                None,
+                "10-Year Change",
+                None,
+            ],
+            [None, None, None, None, "May 2025 ('000)", "Level ('000)", "%", "Level ('000)", "%"],
+            [4, "N", 1111, "Chief Executives", 100.0, 7.5, 0.0766, 15.0, 0.1493],
+            [4, "N", 1112, "General Managers", 200.0, -2.0, -0.01, 3.0, 0.0150],
+            # Not further defined, and a six-digit code: both must be dropped.
+            [2, "Y", 10, "Managers nfd", 6.0, 0.5, 0.0940, 1.0, 0.1698],
+            [6, "N", 111111, "Chief Executive", 1.0, 0.0, 0.0, 0.0, 0.0],
+        ],
+    }
 
 
 @pytest.fixture
 def profiles_xlsx(tmp_path: Path) -> Path:
-    return _write_workbook(
-        tmp_path / "profiles.xlsx",
-        preamble_rows=3,
-        header=[
-            "ANZSCO Code",
-            "Occupation Name",
-            "Employment level (000s)",
-            "Median weekly earnings",
-            "Main education level",
-        ],
-        rows=[
-            ["2611", "ICT Business and Systems Analysts", "89,000", "$2,100", "Bachelor's degree"],
-            ["2544", "Registered Nurses", "345000", "1750", "Bachelor's degree"],
-            # Major-group subtotal and a footnote row: both must be dropped.
-            ["26", "ICT Professionals", "500000", "2000", "Bachelor's degree"],
-            ["Total", "All occupations", "14000000", None, None],
-            # Duplicate code: first occurrence wins.
-            ["2611", "ICT Business and Systems Analysts (dup)", "1", "1", "x"],
-        ],
-    )
+    return _write_tables(tmp_path / "profiles.xlsx", _profiles_tables())
 
 
 @pytest.fixture
 def projections_xlsx(tmp_path: Path) -> Path:
-    return _write_workbook(
-        tmp_path / "projections.xlsx",
-        preamble_rows=5,
-        header=["ANZSCO code", "Five year projected growth (%)", "Ten year projected growth (%)"],
-        rows=[
-            ["2611", "12.5", "24.0"],
-            ["2544", "(1.5)", "9.0"],
-            ["26", "10.0", "20.0"],
-        ],
-    )
+    return _write_tables(tmp_path / "projections.xlsx", _projections_tables())
 
 
-def test_parse_occupation_profiles(profiles_xlsx: Path) -> None:
-    parsed = extract.parse_occupation_profiles(profiles_xlsx)
+def test_profiles_join_employment_earnings_education_and_tasks(profiles_xlsx: Path) -> None:
+    parsed = extract.parse_occupation_profiles(profiles_xlsx).set_index("anzsco_code")
 
-    assert list(parsed["anzsco_code"]) == ["2611", "2544"]
-    assert parsed.loc[0, "title"] == "ICT Business and Systems Analysts"
-    # "$2,100" and "89,000" are coerced to numbers.
-    assert parsed.loc[0, "employment"] == 89000
-    assert parsed.loc[0, "median_earnings"] == 2100
+    rows = parsed.to_dict("index")
+    assert list(rows) == ["1111", "1112"]
+    assert rows["1111"]["title"] == "Chief Executives"
+    assert rows["1111"]["employment"] == 63000  # "63,000" is coerced to a number
+    assert rows["1111"]["median_earnings"] == 2100
+    assert pd.isna(rows["1112"]["median_earnings"])
+    assert rows["1111"]["education"] == "Bachelor degree"
+    assert rows["1112"]["education"] == "Year 12"
 
 
-def test_parse_employment_projections_handles_accounting_negatives(projections_xlsx: Path) -> None:
+def test_task_rows_are_joined_once_per_task(profiles_xlsx: Path) -> None:
+    parsed = extract.parse_occupation_profiles(profiles_xlsx).set_index("anzsco_code")
+
+    assert parsed.loc["1111", "description"] == "Determining objectives; Providing direction"
+    assert parsed.loc["1112", "description"] == "Planning operations"
+
+
+def test_projections_scale_fractions_and_drop_nfd_units_and_six_digit_rows(
+    projections_xlsx: Path,
+) -> None:
     parsed = extract.parse_employment_projections(projections_xlsx)
 
-    assert list(parsed["anzsco_code"]) == ["2611", "2544"]
-    assert parsed.loc[0, "growth_5yr_pct"] == 12.5
-    assert parsed.loc[1, "growth_5yr_pct"] == -1.5
+    assert list(parsed["anzsco_code"]) == ["1111", "1112"]
+    indexed = parsed.set_index("anzsco_code")
+    assert indexed.loc["1111", "growth_5yr_pct"] == pytest.approx(7.66)
+    assert indexed.loc["1111", "growth_10yr_pct"] == pytest.approx(14.93)
+    assert indexed.loc["1112", "growth_5yr_pct"] == pytest.approx(-1.0)
 
 
-def test_parse_rejects_workbook_without_anzsco_header(tmp_path: Path) -> None:
-    path = _write_workbook(
-        tmp_path / "bad.xlsx", preamble_rows=1, header=["Job", "Count"], rows=[["Nurse", 1]]
-    )
+def test_missing_tasks_table_is_reported_by_name(tmp_path: Path) -> None:
+    path = _write_tables(tmp_path / "no_tasks.xlsx", _profiles_tables(include_tasks=False))
 
-    with pytest.raises(extract.ExtractError, match="header row mentioning 'ANZSCO'"):
+    with pytest.raises(extract.ExtractError, match="'tasks'"):
         extract.parse_occupation_profiles(path)
 
 
-def test_parse_reports_missing_employment_column(tmp_path: Path) -> None:
-    path = _write_workbook(
-        tmp_path / "no_employment.xlsx",
-        preamble_rows=0,
-        header=["ANZSCO Code", "Occupation Name", "Median weekly earnings"],
-        rows=[["2611", "Analysts", "2100"]],
-    )
+def test_workbook_without_an_anzsco_table_is_reported(tmp_path: Path) -> None:
+    path = _write_tables(tmp_path / "bad.xlsx", {"Sheet1": [["Job", "Count"], ["Nurse", 1]]})
 
-    with pytest.raises(extract.ExtractError, match="employment column"):
+    with pytest.raises(extract.ExtractError, match="'anzsco'"):
         extract.parse_occupation_profiles(path)
 
 
@@ -159,9 +191,9 @@ def test_run_offline_writes_both_outputs(
 
     assert list(merged.columns) == extract.OUTPUT_COLUMNS
     assert json_path.exists() and csv_path.exists()
-    records = extract.to_records(merged)
-    assert {r["anzsco_code"] for r in records} == {"2544", "2611"}
-    assert records[0]["growth_10yr_pct"] == 9.0
+    records = {r["anzsco_code"]: r for r in extract.to_records(merged)}
+    assert set(records) == {"1111", "1112"}
+    assert records["1112"]["growth_10yr_pct"] == pytest.approx(1.5)
 
 
 def test_to_records_renders_missing_values_as_null() -> None:
